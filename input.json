@@ -1,0 +1,22 @@
+{
+	"duration" : 15,
+	"sampleFrequency" : 5,
+	"cpu" : [
+		"root",
+		"edged",
+		"dbus-daemon"
+	],
+	"commands" : [
+		"handoff",
+		{
+			"getcntr" : [
+				"memb.mod_timer_handle_t.tot_bytes",
+				"memb.mod_lookup_context_t.tot_bytes",
+				"memb.mod_route_cache_entry_t.obj_cnt",
+				"memb.mod_ref_count_obj_t.obj_cnt",
+				"memb.mod_app_subnet_t.tot_bytes"
+			]
+		}
+		
+	]
+}
