@@ -13,16 +13,21 @@ import sys
 import random
 from zipfile import ZipFile
 
+def loadData(fileAddr):
+	with open(fileAddr) as rObj:
+		data = json.load(rObj)
+	return data
+
 files = {
-	"all" : "output/cpu/all.json",
-	"edged" : "output/cpu/edged.json",
-	"dbus-daemon" : "output/cpu/dbus-daemon.json",
-	"handoff" : "output/handoff.json",
-	"flowcount" : "output/flowcount.txt",
-	"counters" : "output/counters.json",
-	"perf stat" : "output/perf/stat/",
-	"perfReport_cpu" : "output/perf/report/cpu/",
-	"perfReport_drops" : "output/perf/report/drops/"
+	"all" : "tempResult/cpu/all.json",
+	"edged" : "tempResult/cpu/edged.json",
+	"dbus-daemon" : "tempResult/cpu/dbus-daemon.json",
+	"handoff" : "tempResult/handoff.json",
+	"flowcount" : "tempResult/flowcount.txt",
+	"counters" : "tempResult/counters.json",
+	"perf stat" : "tempResult/perf/stat/",
+	"perfReport_cpu" : "tempResult/perf/report/cpu/",
+	"perfReport_drops" : "tempResult/perf/report/drops/"
 }
 
 commandList = {
@@ -47,11 +52,6 @@ def createDirectory(directory) :
 def getFileAddr(process):
 	fileAddr = files[process]
 	return fileAddr
-
-def loadData(fileAddr):
-	with open(fileAddr) as rObj:
-		data = json.load(rObj)
-	return data
 
 def writeFile(output, fileAddr):
 	with open(fileAddr, "w") as wObj:		
@@ -361,7 +361,7 @@ def collectStat(input, noOfSample):
 	for key in input.keys():
 
 		if key == "cpu":
-			createDirectory(input['outputDirectory'] + '/' + key)
+			createDirectory('tempResult/' + key)
 			t1 = threading.Thread(target = targetFunction[key], args = (input, noOfSample, input['sampleFrequency'], ))
 			t1.start()
 
@@ -375,8 +375,8 @@ def collectStat(input, noOfSample):
 			t3.start()
 
 		elif key == "perf stat" :
-			createDirectory(input['outputDirectory'] + "/perf")
-			createDirectory(input['outputDirectory'] + "/perf/stat")
+			createDirectory("tempResult/perf")
+			createDirectory("tempResult/perf/stat")
 			t4 = threading.Thread(target = targetFunction[key], args = (input, getFileAddr(key), noOfSample, input['sampleFrequency'], ))
 			t4.start()
 
@@ -384,25 +384,6 @@ def collectStat(input, noOfSample):
 	t2.join()
 	t3.join()
 	t4.join()
-
-def zipOutput():
-
-	path = '/root/aishu/psutil/output'
-
-	files = []
-	for r, d, f in os.walk(path):
-	    for file in f:
-	        files.append(os.path.join(r, file))
-
-	# for file_name in files :
-	# 	print(file_name) 
-
-	with open("op.zip", "w") as zip:
-		for f in files:
-			zip.write(f)
-
-	# with ZipFile("op.zip", "r") as zipFile :
-	# 	zipFile.extractall(".")
 
 def perfRecord(duration) :
 	res = executeCommand("perf record sleep 2 > perf.data")
@@ -422,14 +403,61 @@ def perfReport(outputDirectory, criticalThreads, key) :
 	for tid in top10Threads:
 		fileName = generateFileName(getFileAddr("perfReport_{0}".format(key)), tid, 1)
 		res = executeCommand("perf report --call-graph=none --tid={0} > {1}".format(tid, fileName))
-		
+
+def moveOutput(input, timeStamp):
+
+	cwd = os.getcwd()
+
+	try:
+		os.chdir('/' + input['outputDirectory'])
+	except:
+		directories = input['outputDirectory'].split('/')
+		os.chdir('/')
+		for directory in directories :
+			try:
+				os.chdir(directory)
+			except:
+				os.mkdir(directory)
+				os.chdir(directory)
+
+	oldResult = commands.getoutput("find /{0} -name 'result_*'".format(input['outputDirectory']))
+	print(oldResult)
+	print(os.path.isdir(oldResult))
+	if oldResult and os.path.isdir(oldResult):
+		print("yes")
+		shutil.rmtree(oldResult)
+
+	os.rename('{0}/tempResult'.format(cwd), '/{0}/{1}'.format(input['outputDirectory'], "result_{0}".format(int(timeStamp))))
+
+def zipOutput():
+
+	path = '/root/aishu/psutil/' + input["outputDirectory"]
+
+	files = []
+	for r, d, f in os.walk(path):
+	    for file in f:
+	        files.append(os.path.join(r, file))
+
+	# for file_name in files :
+	# 	print(file_name) 
+
+	with open("op.zip", "w") as zip:
+		for f in files:
+			zip.write(f)
+
+	# with ZipFile("op.zip", "r") as zipFile :
+	# 	zipFile.extractall(".")
 
 def main():
 
 	input = loadData("input.json")
+	timeStamp = time.time()
+	
 	# reset 
-	clearDirectory(input['outputDirectory'])
-	createDirectory(input['outputDirectory'])
+	# clearDirectory(input['outputDirectory'])
+	# createDirectory(input['outputDirectory'])
+	
+	createDirectory("tempResult")
 
 	noOfSample = input["duration"] / input["sampleFrequency"]
 
@@ -444,9 +472,10 @@ def main():
 	criticalThreads = findCriticalThreads("cpu")
 	perfReport(input['outputDirectory'], criticalThreads, "cpu")
 
-	# zipOutput()
+	moveOutput(input, timeStamp)
 
+	zipOutput()
 
-
+		
 if __name__ == "__main__":
 	main()

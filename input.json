@@ -1,7 +1,7 @@
 {
 	"duration" : 15,
 	"sampleFrequency" : 5,
-	"outputDirectory" : "output",
+	"outputDirectory" : "root/psutil/result",
 	"auto mode" : 0,
 	"triggers" : {
 		"drops" : 5500,
@@ -14,7 +14,7 @@
 			"memb.mod_vc_qos_calc_deqrate_slot_t.tot_bytes" : 33400
 		}
 	},
-	
+
 	"cpu" : [
 		"all",
 		"edged",
