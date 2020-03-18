@@ -12,6 +12,7 @@ import ast
 import sys
 import random
 from zipfile import ZipFile
+from prettytable import PrettyTable
 
 def loadData(fileAddr):
 	with open(fileAddr) as rObj:
@@ -92,7 +93,7 @@ def getThread(proc, thread) :
 		threadEntry['user_time'] = thread.user_time
 		threadEntry['system_time'] = thread.system_time
 
-		print("{0} {1} {2}".format(threadEntry['tid'], threadEntry['name'], threadEntry['cpu_percent']))
+		# print("{0} {1} {2}".format(threadEntry['tid'], threadEntry['name'], threadEntry['cpu_percent']))
 
 		return threadEntry
 	except:
@@ -129,13 +130,11 @@ def collectNextProcessSample(input, lock) :
 					if(index != -1):
 						t = CustomTimer(0, getProcessSamples, [proc])
 						t.start()
-						print("\t\t {0}".format(len(data[process][index]['samples'])))
 						data[process][index]['samples'].append(t.join())
 					else :
 						newProcess = getProcessDetails(proc)
 						t = CustomTimer(0, getProcessSamples, [proc])
 						t.start()
-						print("\t\t {0}".format(len(data[process]['samples'])))
 						newProcess['samples'].append(t.join())
 						data[process].append(newProcess)
 			else :
@@ -143,7 +142,6 @@ def collectNextProcessSample(input, lock) :
 					pid = data[process]["pid"]
 					t = CustomTimer(0, getProcessSamples, [psutil.Process(pid)])
 					t.start()
-					print("\t\t {0}".format(len(data[process]['samples'])))
 					data[process]['samples'].append(t.join())
 				except:
 					pass
@@ -222,16 +220,26 @@ def findCriticalThreads_dropBased() :
 	handoff = loadData(files["handoff"]) 
 	handoff = poisonQueue(handoff)
 
-	threadWithDrop = {}
+	threadWithDrop = defaultdict(list)
 
-	nTS = len(handoff["handoff"]) - 1
-	fTS = handoff["handoff"][0].items()[0][0]
-	lTS = handoff["handoff"][nTS].items()[0][0]
+	for ts in handoff["handoff"]:
+		TS = ts.items()[0][0]
+		for queue in ts[TS]['handoffq']:
+			threadWithDrop[queue['tid']].append(queue['drops'])
+	
+	threadList = defaultdict(dict)
+	for tid in threadWithDrop:
+		threadList[tid] = {}
+		threadList[tid]["avg"] = sum(threadWithDrop[tid]) / len(threadWithDrop[tid])
+		threadList[tid]["incRate"] = threadWithDrop[tid][len(threadWithDrop[tid]) - 1] - threadWithDrop[tid][0]
+		threadList[tid]["totalDrops"] = threadWithDrop[tid][len(threadWithDrop[tid]) - 1]
+	
+	sortedRes = OrderedDict()
+	
+	for key, value in sorted(threadList.items(), key = lambda item : item[1]["incRate"], reverse = True):
+		sortedRes[key] = value
 
-	for queue in range(len(handoff["handoff"][0][fTS]["handoffq"])):
-		threadWithDrop[handoff["handoff"][0][fTS]["handoffq"][queue]["tid"]] = handoff["handoff"][nTS][lTS]["handoffq"][queue]["drops"] - handoff["handoff"][0][fTS]["handoffq"][queue]["drops"]
-
-	return threadWithDrop
+	return sortedRes
 
 def findCriticalThreads_cpuBased() :
 
@@ -247,23 +255,24 @@ def findCriticalThreads_cpuBased() :
 					pass
 
 	for key in threadWithCpuPercent :
-		print(str(key) + " - " + str(threadWithCpuPercent[key]))
-		# print(str(key) + " - " + psutil.Process(key).name() + " - " + str(threadWithCpuPercent[key]))
+		# print(str(key) + " - " + str(threadWithCpuPercent[key]))
 		threadWithCpuPercent[key] = sum(threadWithCpuPercent[key]) / len(threadWithCpuPercent[key])
-
-	return threadWithCpuPercent
-
-def findCriticalThreads(key) :
-
-	if key == "cpu" :
-		resDict = findCriticalThreads_cpuBased()
-	elif key == "drops" :
-		resDict = findCriticalThreads_dropBased()
 
 	sortedRes = OrderedDict()
 
-	for key, value in sorted(resDict.items(), key = lambda item : item[1], reverse = True):
+	for key, value in sorted(threadWithCpuPercent.items(), key = lambda item : item[1], reverse = True):
 		sortedRes[key] = value
+
+	return sortedRes
+
+def findCriticalThreads(key) :
+
+	sortedRes = OrderedDict()
+
+	if key == "cpu" :
+		sortedRes = findCriticalThreads_cpuBased()
+	elif key == "drops" :
+		sortedRes = findCriticalThreads_dropBased()
 
 	top10 = OrderedDict()
 	count = 0
@@ -273,8 +282,6 @@ def findCriticalThreads(key) :
 			count +=1
 		else :
 			break
-
-	print(top10)
 	return top10
 
 def getHandoff(fileAddr, noOfSample, sampleFrequency) :
@@ -386,22 +393,23 @@ def collectStat(input, noOfSample):
 	t4.join()
 
 def perfRecord(duration) :
-	res = executeCommand("perf record sleep 2 > perf.data")
+	res = executeCommand("perf record -s -F 999 -a --call-graph dwarf --sleep {0}".format(duration))
 
 def isRecordDone():				# for now
 	return True
 
-def perfReport(outputDirectory, criticalThreads, key) :
+def perfReport(criticalThreads, key, timeStamp) :
 	while isRecordDone() == False:
 		continue
 
 	top10Threads = [item[0] for item in criticalThreads.items()]
 
-	createDirectory(outputDirectory + "/perf/report")
-	createDirectory(outputDirectory + "/perf/report/" + key)
+	createDirectory("tempResult/perf/report")
+	createDirectory("tempResult/perf/report/" + key)
 
 	for tid in top10Threads:
-		fileName = generateFileName(getFileAddr("perfReport_{0}".format(key)), tid, 1)
+		fileName = generateFileName(getFileAddr("perfReport_{0}".format(key)), tid, int(timeStamp))
+		# res = executeCommand("perf report --tid={0} --stdio > {1}".format(tid, fileName))
 		res = executeCommand("perf report --call-graph=none --tid={0} > {1}".format(tid, fileName))
 
 def moveOutput(input, timeStamp):
@@ -420,62 +428,79 @@ def moveOutput(input, timeStamp):
 				os.mkdir(directory)
 				os.chdir(directory)
 
-	oldResult = commands.getoutput("find /{0} -name 'result_*'".format(input['outputDirectory']))
-	print(oldResult)
-	print(os.path.isdir(oldResult))
+	oldResult = commands.getoutput("find /{0} -maxdepth 1 -name 'result_*'".format(input['outputDirectory']))
 	if oldResult and os.path.isdir(oldResult):
-		print("yes")
 		shutil.rmtree(oldResult)
 
 	os.rename('{0}/tempResult'.format(cwd), '/{0}/{1}'.format(input['outputDirectory'], "result_{0}".format(int(timeStamp))))
 
-def zipOutput():
+def checkAndDelete(input):
+	availableZip = commands.getoutput("find /{0}/zippedResult -name 'result_*'".format(input['outputDirectory']))
+	availableZip = (availableZip.split('\n'))
+	availableZip.sort()
+	if len(availableZip) == 10:
+		commands.getoutput('rm {0}'.format(availableZip[0]))
 
-	path = '/root/aishu/psutil/' + input["outputDirectory"]
+def zipOutput(input, timeStamp):
 
-	files = []
-	for r, d, f in os.walk(path):
-	    for file in f:
-	        files.append(os.path.join(r, file))
+	path = '/{0}/result_{1}'.format(input["outputDirectory"], int(timeStamp))
 
-	# for file_name in files :
-	# 	print(file_name) 
+	if os.path.isdir('/{0}/zippedResult'.format(input['outputDirectory'])) :
+		checkAndDelete(input)
+	else:
+		createDirectory('/{0}/zippedResult'.format(input['outputDirectory']))
 
-	with open("op.zip", "w") as zip:
-		for f in files:
-			zip.write(f)
+	with ZipFile('/{0}/zippedResult/result_{1}.zip'.format(input["outputDirectory"], int(timeStamp)),'w') as zip:
+		for root, directories, files in os.walk(path):
+			for filename in files:
+				filepath = os.path.join(root, filename)
+				zip.write(filepath)
+	# with ZipFile('/{0}/zippedResult/result_{1}.zip'.format(input["outputDirectory"], int(timeStamp)), "r") as zip:
+	# 	zip.extractall()
 
-	# with ZipFile("op.zip", "r") as zipFile :
-	# 	zipFile.extractall(".")
+def printTable(key, timeStamp, criticalThreads):
+	table = PrettyTable(["tid", key, "perf report"])
+	table.align['perf report'] = 'l'
+	for tid in criticalThreads:
+		report = ''
+		with open('/root/psutil/tempResult/perf/report/{0}/{1}_{2}.txt'.format(key, tid, int(timeStamp)), 'r') as fObj:
+			content = fObj.readlines()[8:-4]
+			report = report.join(content)
+
+		if key == "cpu":
+			table.add_row([tid, criticalThreads[tid], report])
+		elif key =="drops":
+			table.add_row([tid, str(criticalThreads[tid]['incRate']) + '(' + str(criticalThreads[tid]['totalDrops']) + ')', report])
+	print(table)	
 
 def main():
 
 	input = loadData("input.json")
-	timeStamp = time.time()
-	
-	# reset 
-	# clearDirectory(input['outputDirectory'])
-	# createDirectory(input['outputDirectory'])
-	
-	createDirectory("tempResult")
-
 	noOfSample = input["duration"] / input["sampleFrequency"]
+	print("Potential root cause")
 
-	perfRecord(input["duration"])
+	while True:
+		timeStamp = time.time()	
+		createDirectory("/root/psutil/tempResult")
+		os.chdir("/root/psutil")
 
- 	collectStat(input, noOfSample)
+		perfRecord(input["duration"])
+ 		collectStat(input, noOfSample)
 
- 	# find critical threads
-	criticalThreads = findCriticalThreads("drops")
-	perfReport(input['outputDirectory'], criticalThreads, "drops")
+ 		# find critical threads
+		criticalThreads = findCriticalThreads("drops")
+		perfReport(criticalThreads, "drops", timeStamp)
+		printTable("drops", timeStamp, criticalThreads)
 
-	criticalThreads = findCriticalThreads("cpu")
-	perfReport(input['outputDirectory'], criticalThreads, "cpu")
+		criticalThreads = findCriticalThreads("cpu")
+		perfReport(criticalThreads, "cpu", timeStamp)
+		printTable("cpu", timeStamp, criticalThreads)
 
-	moveOutput(input, timeStamp)
+		moveOutput(input, timeStamp)
+		zipOutput(input, timeStamp)
 
-	zipOutput()
+		if input['auto mode'] == 0 :
+			break
 
-		
 if __name__ == "__main__":
 	main()
