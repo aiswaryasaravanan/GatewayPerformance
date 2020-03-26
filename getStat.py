@@ -17,7 +17,7 @@ files = {
 	"all" : "tempResult/cpu/all.json",
 	"edged" : "tempResult/cpu/edged.json",
 	"dbus-daemon" : "tempResult/cpu/dbus-daemon.json",
-	"handoff" : "tempResult/handoff.json",
+	"handoff" : "tempResult/commands/handoff.json",
 	"flowcount" : "tempResult/flowcount.txt",
 	"counters" : "tempResult/counters.json",
 	"perf stat" : "tempResult/perf/stat",
@@ -27,7 +27,7 @@ files = {
 
 commandList = {
 	"handoff" : "debug.py -v --handoff ",
-	"flowcount" : "dispcnt -s mod_fc -z ",
+	# "flowcount" : "dispcnt -s mod_fc -z ",
 	"counters" : "getcntr -c",
 	"perf stat" : "perf stat"
 }
@@ -227,23 +227,35 @@ def getHandoff(fileAddr, noOfSample, sampleFrequency) :
 
 		noOfSample -= 1
 		sample = {}
-		c = CustomTimer(delay, executeCommand, [commandList['handoff']])		#actual
+		c = CustomTimer(delay, executeCommand, [commandList['handoff']])		
 		c.start()
+		timeStamp = time.time()
 		entry = {}
 		entry = c.join()
-		sample[time.time()] = eval(entry)
+		sample[timeStamp] = eval(entry)
 		output['handoff'].append(sample)
 		delay = sampleFrequency
 
 	writeFile(output, fileAddr)
 
-def getCounterSamples(input):
-	count = {}
-	for cntr in input["counters"]:
-		c = CustomTimer(0, executeCommand, ["{0} {1}".format(commandList['counters'], cntr)])		# actual
-		c.start()
-		count[cntr] = c.join()
-	return count
+def getDpdkInterfaceNames():
+	dpdkPortsDump = commands.getoutput('debug.py -v --dpdk_ports_dump')
+	dpdkPortsDump = eval(dpdkPortsDump)
+	dpdkInterfaceNames = []
+	for dump in dpdkPortsDump:
+		dpdkInterfaceNames.append(dump['name'])
+	return dpdkInterfaceNames
+
+def getCounterSamples():
+	
+	dpdkInterfaceNames = getDpdkInterfaceNames()
+	countersList = {}
+	for name in dpdkInterfaceNames:
+		countersList['dpdk_{0}_pstat_ierrors'.format(name)] = executeCommand('{0} dpdk_{1}_pstat_ierrors'.format(commandList['counters'], name))
+		countersList['dpdk_{0}_pstat_oerrors'.format(name)] = executeCommand('{0} dpdk_{1}_pstat_oerrors'.format(commandList['counters'], name))
+		countersList['dpdk_{0}_pstat_imissed'.format(name)] = executeCommand('{0} dpdk_{1}_pstat_imissed'.format(commandList['counters'], name))
+
+	return countersList
 
 def getCounters(input, noOfSample, sampleFrequency) :
 	output = {}
@@ -254,24 +266,25 @@ def getCounters(input, noOfSample, sampleFrequency) :
 		noOfSample -= 1
 		sample = {}
 		
-		c = CustomTimer(delay, getCounterSamples, [input])
+		c = CustomTimer(delay, getCounterSamples, [])
 		c.start()
 
 		sample[time.time()] = c.join()
 		output['counters'].append(sample)
-		delay = sampleFrequency
+		delay = sampleFrequency						# for now
 
 	fileAddr = getFileAddr("counters")
 	writeFile(output, fileAddr)
 
 def getPerfStatSamples(input, directory):
 	timeStamp = time.time()
-	for process in psutil.process_iter():			# TODO : should be from all.json
-		fileAddr = generateFileName(directory, process.pid, timeStamp)
+	for process in psutil.process_iter():			
+		for thread in process.threads():
+			fileAddr = generateFileName(directory, thread.id, timeStamp)
 
-		c = CustomTimer(0, executeCommand, ["{0} -e {1} sleep 0.01".format(commandList['perf stat'], ','.join(input["perf stat"]))])
-		c.start()
-		writeTxtFile(c.join(), fileAddr)
+			c = CustomTimer(0, executeCommand, ["{0} -e {1} -t {2} sleep 0.01".format(commandList['perf stat'], ','.join(input["perf stat"]), thread.id)])
+			c.start()
+			writeTxtFile(c.join(), fileAddr)
 
 def getPerfStat(input, noOfSample, sampleFrequency) :
 	delay = 0
@@ -301,6 +314,7 @@ def getDiagDump(input, noOfSample):
 			# threadObjects.append(t)
 
 		elif key == "commands":
+			createDirectory('tempResult/{0}'.format(key))
 			for cmd in input[key]:
 				t2 = threading.Thread(target = targetFunction[cmd], args = (getFileAddr(cmd), noOfSample, input['sampleFrequency'], ))
 				t2.start()
@@ -329,7 +343,7 @@ def doPerfRecord(outputDirectory) :
 	global isRecording
 	isRecording = 1
 	print("recording")
-	res = executeCommand("perf record -s -F 999 -a --call-graph dwarf -- sleep 3 > {0}/tempResult/perf.data".format(outputDirectory))
+	res = executeCommand("perf record -s -F 999 -a --call-graph dwarf -- sleep 3 > {0}/tempResult/perf/perf.data".format(outputDirectory))
 	print("recorded")
 
 def modifyDrop(drop) :
@@ -409,6 +423,62 @@ def findCriticalThreads_dropBased(threshold, outputDirectory) :
 
 	return sortedRes
 
+def poisonCounters(counters) :
+	flag = 1
+	for TS in counters['counters']:
+		if flag :
+			pre = TS
+			flag = 0
+			continue
+
+		for counter in TS[TS.items()[0][0]]:
+			TS[TS.items()[0][0]][counter] = modifyDrop(int(pre[pre.items()[0][0]][counter]))
+		pre = TS
+
+	return counters
+
+def findCriticalThreads_dpdkCounters(threshold, outputDirectory) :
+	counters = loadData(outputDirectory + '/' + files['counters'])
+	counters = poisonCounters(counters)
+
+	threadWithDpdkCounters = defaultdict(dict)
+	dpdkCounters = {}
+
+	fields = ['counters', 'drop']
+	table = PrettyTable(fields)
+	alignTable(table, fields, 'l')
+
+	for TS in counters['counters']:
+		for counter in TS[TS.items()[0][0]]:
+			counterDrop = TS[TS.items()[0][0]][counter]
+			if counterDrop >= threshold:
+				if not dpdkCounters.has_key(counter):
+					dpdkCounters[counter] = []
+				dpdkCounters[counter].append(int(counterDrop))
+
+	sortedRes = OrderedDict()
+	# sortedRes = dict(sorted(dpdkCounters.items(), key = lambda item : (sum(item[1]) / len(item[1])), reverse =True))
+	sortedRes = dict(sorted(dpdkCounters.items(), key = lambda item : item[1][len(item[1]) - 1] - item[1][0], reverse =True))
+
+
+	for counter in sortedRes:
+		length = len(sortedRes[counter])
+		table.add_row([counter, str(sortedRes[counter][length -1] - sortedRes[counter][0]) + '(' + str(sortedRes[counter][length -1]) + ')'])
+
+	for process in psutil.process_iter():
+		if process.name() == 'edged':
+			for thread in process.threads():
+				th = psutil.Process(thread.id)
+				if th.name() == 'dpdk_master':
+					tid = thread.id
+					break
+			break
+
+	threadWithDpdkCounters[tid]['name'] = 'dpdk_master'
+	# threadWithDpdkCounters[tid]['Dpdk Counters'] = sorted(dpdkCounters.items(), key = lambda item : sum(item[1]) / len(item[1]), reverse =True)
+	threadWithDpdkCounters[tid]['Dpdk Counters'] = table
+	return threadWithDpdkCounters
+
 def getTop10(sortedRes):
 	top10 = OrderedDict()
 	count = 0
@@ -428,6 +498,8 @@ def findCriticalThreads(key, threshold, outputDirectory) :
 		sortedRes = findCriticalThreads_cpuBased(threshold, outputDirectory)
 	elif key == "drops" :
 		sortedRes = findCriticalThreads_dropBased(threshold, outputDirectory)
+	elif key == "counters" :
+		sortedRes = findCriticalThreads_dpdkCounters(threshold, outputDirectory)
 
 	return getTop10(sortedRes)
 
@@ -438,12 +510,12 @@ def isFileExists(fileName, directory):
 	time.sleep(1)
 	return 0
 
-def doPerfReport(key, criticalThreads, outputDirectory, timeStamp):
+def doPerfReport(key, criticalThreads, outputDirectory, timeStamp):					
 	print("reporting....")
 	global isRecording 
 
 	if isRecording:
-		while not isFileExists('perf.data', outputDirectory + '/tempResult'):
+		while not isFileExists('perf.data', outputDirectory + '/tempResult/perf'):
 			pass
 
 	directory = '{0}/perfReport'.format(outputDirectory)
@@ -454,15 +526,19 @@ def doPerfReport(key, criticalThreads, outputDirectory, timeStamp):
 		# res = executeCommand("perf report --tid={0} --stdio > {1}".format(tid, fileName))
 		res = executeCommand("perf report --call-graph=none --tid={0} > {1}".format(tid, fileName))
 
+def alignTable(tableObject, fields, alignment):
+	for field in fields :
+		tableObject.align[field] = alignment
+
 def printTable(outputDirectory, key, criticalThreads, timeStamp):
-	print("printing....")
-	if key == 'cpu' :
+	if key == 'cpu' or key == 'counters' :
 		displayName = 'Thread Name'
 	elif key == 'drops':
 		displayName = 'Handoff Queue Name'
 
-	table = PrettyTable([displayName, key, "perf report"])
-	table.align['perf report'] = 'l'
+	fields = [displayName, key, "perf Report", "Perf Stat"]
+	table = PrettyTable(fields)
+	alignTable(table, fields, 'l')
 
 	for tid in criticalThreads:
 		report = ''
@@ -470,12 +546,23 @@ def printTable(outputDirectory, key, criticalThreads, timeStamp):
 			content = fObj.readlines()[8:-4]
 			report = report.join(content)
 
+		stat = ''
+		try:
+			with open ('{0}/{1}'.format(outputDirectory, generateFileName(getFileAddr('perf stat'), tid, timeStamp)), 'r') as statObj:
+				content = statObj.readlines()[3:-2]
+				stat = stat.join(content)
+		except:
+			stat = 'file not found'
+
+
 		if key == "cpu":
-			table.add_row([criticalThreads[tid]['name'], sum(criticalThreads[tid]['cpuPercent']) / len(criticalThreads[tid]['cpuPercent']) , report])
+			table.add_row([criticalThreads[tid]['name'], sum(criticalThreads[tid]['cpuPercent']) / len(criticalThreads[tid]['cpuPercent']) , report, stat])
 		elif key =="drops":
 			increaseRate = criticalThreads[tid]['drops'][len(criticalThreads[tid]['drops']) - 1] - criticalThreads[tid]['drops'][0]
 			totalDrops = criticalThreads[tid]['drops'][len(criticalThreads[tid]['drops']) - 1]
-			table.add_row([criticalThreads[tid]['name'], str(increaseRate) + '(' + str(totalDrops) + ')', report])
+			table.add_row([criticalThreads[tid]['name'], str(increaseRate) + '(' + str(totalDrops) + ')', report, stat])
+		elif key == 'counters':
+			table.add_row([criticalThreads[tid]['name'], criticalThreads[tid]['Dpdk Counters'], report, stat])
 	print(table)
 	del table
 
@@ -490,7 +577,6 @@ def checkForThresholdHits(trigger, outputDirectory, timeStamp):
 
 	global isRecording
 	isRecording = 0
-	os.remove('perf.data')
 
 def getHardwareInfo(manifest):
 	manifest['deviceModel'] = commands.getoutput('cat /opt/vc/lib/python/hardwareinfo.py | grep DEVICE_MODEL').split(' = ')[1]
@@ -536,6 +622,12 @@ def checkAndDelete(outputDirectory):
 	if len(availableZip) == 2:
 		sts = commands.getoutput('rm {0}'.format(availableZip[0]))
 
+def deleteTemporaryFiles(outputDirectory, timeStamp):
+	os.remove('perf.data')
+	clearDirectory('{0}/diagDump_{1}'.format(outputDirectory, timeStamp))
+	clearDirectory('{0}/perfReport'.format(outputDirectory))
+	clearDirectory(outputDirectory + '/tempResult')
+
 def zipOutput(outputDirectory, timeStamp):
 
 	moveDirectory('{0}/tempResult'.format(outputDirectory), '{0}/diagDump_{1}'.format(outputDirectory, timeStamp))
@@ -548,7 +640,6 @@ def zipOutput(outputDirectory, timeStamp):
 			for filename in files:
 				filepath = os.path.join(root, filename)
 				zip.write(filepath)
-	clearDirectory('{0}/diagDump_{1}'.format(outputDirectory, timeStamp))
 
 def unZipOutput(filename, outputDirectory):
 
@@ -584,7 +675,7 @@ def main():
 		timeStamp = time.time()
 		unZipOutput(argDict.items()[0][1], input['outputDirectory'])
 		checkForThresholdHits(input['triggers'], input['outputDirectory'], timeStamp)
-		clearDirectory(input['outputDirectory'] + '/tempResult')
+		deleteTemporaryFiles(outputDirectory, timeStamp)			# timestamp no need... make optional param in def
 		pass
 
 	else:
@@ -607,8 +698,11 @@ def main():
 				moveDirectory('tempResult', input['outputDirectory'])
 			
 				checkForThresholdHits(input['triggers'], input['outputDirectory'], timeStamp)
+
 				createManifest(input['outputDirectory'])
+
 				zipOutput(input['outputDirectory'], timeStamp)
+				deleteTemporaryFiles(input['outputDirectory'], timeStamp)
 
 				consecutiveThresholdExceedLimit -= 1
 
