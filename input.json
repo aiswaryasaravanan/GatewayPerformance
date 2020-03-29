@@ -1,34 +1,54 @@
 {
 	"duration" : 15,
 	"sampleFrequency" : 5,
-	"outputDirectory" : "root/psutil/result",
-	"auto mode" : 0,
-	"triggers" : {
-		"drops" : 5500,
-		"cpu" : 70,
-		"counters" : {
-			"memb.mod_dns_data_buffer_t.tot_bytes" : 3100,
-			"memb.mod_vc_peer_qos_seg_stats_t.tot_bytes" : 2250,
-			"memb.mod_vc_link_cos_qos_t.tot_bytes" : 3300,
-			"memb.mod_vc_qos_calc_deqrate_t.tot_bytes" : 10010,
-			"memb.mod_vc_qos_calc_deqrate_slot_t.tot_bytes" : 33400
-		}
+	"outputDirectory" : "/root/psutil/result",
+	"auto mode" : {
+		"consecutiveThresholdExceedLimit" : 2
 	},
-
 	"cpu" : [
-		"all",
-		"edged",
-		"dbus-daemon"
+		{
+			"name" : "all",
+			"trigger" : 3.75
+		},
+		{
+			"name" : "edged"
+		},
+		{
+			"name" : "dbus-daemon"
+		}
 	],
 	"commands" : [
-		"handoff"
+		{
+			"name" : "handoff",
+			"trigger" : 750
+		},
+		{
+			"name" : "edged -v"
+		},
+		{
+			"name" : "top -H -n 1"
+		}
+
 	],
 	"counters" : [
-		"memb.mod_dns_data_buffer_t.tot_bytes",
-		"memb.mod_vc_peer_qos_seg_stats_t.tot_bytes",
-		"memb.mod_vc_link_cos_qos_t.tot_bytes",
-		"memb.mod_vc_qos_calc_deqrate_t.tot_bytes",
-		"memb.mod_vc_qos_calc_deqrate_slot_t.tot_bytes"
+		{
+			"name" : "memb.mod_dns_data_buffer_t.tot_bytes",
+			"trigger" : 3000
+		},
+		{
+			"name" : "memb.mod_vc_peer_qos_seg_stats_t.tot_bytes",
+			"trigger" : 5000
+		},
+		{
+			"name" : "memb.mod_vc_link_cos_qos_t.tot_bytes"
+		},
+		{
+			"name" : "memb.mod_vc_qos_calc_deqrate_t.tot_bytes"
+		},
+		{
+			"name" : "memb.mod_vc_qos_calc_deqrate_slot_t.tot_bytes",
+			"trigger" : 6000
+		}		
 	],
 	"perf stat" : [
 		"dTLB-loads",
