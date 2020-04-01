@@ -16,7 +16,8 @@ files = {
     "handoff" : "tempResult/commands/handoff.json",
     "counters" : "tempResult/counters.json",
     "perf stat" : "tempResult/perf/stat",
-    "perf report" : "tempResult/perf/report"
+    "perf report" : "tempResult/perf/report",
+    # "perf report2" : "tempResult/perf/report2"
 }
 
 commandList = {
@@ -183,6 +184,11 @@ def createSummary(criticalItems):
 def alignTable(tableObject, fields, alignment):
     for field in fields :
         tableObject.align[field] = alignment
+        
+def readFile(fileAddr, fromLine, toLine):
+    with open (fileAddr, 'r') as obj:
+        content = obj.readlines()[fromLine: toLine]
+        return content
 
 def printTable(criticalItems):
     for key in criticalItems:
@@ -198,16 +204,18 @@ def printTable(criticalItems):
 
         if key != 'counters':
             for tid in criticalItems[key]:
-
-                report = ''
-                with open(generateFileName('{0}/{1}'.format(getFileAddr('perf report'), key), tid), 'r') as fObj:
-                    content = fObj.readlines()[8:-4]
-                    report = report.join(content)
-
+                
+                report = []
+                for cnt in range(globalVariable.recordCount):
+                    report.append('Report_{0}\n'.format(cnt + 1))
+                    rep = ''
+                    content = readFile(generateFileName('{0}/{1}'.format(getFileAddr('perf report') + str(cnt + 1), key), tid), 8, -4)
+                    report.append(rep.join(content))
+                report = ''.join(report)
+                                
                 stat = ''
-                with open (generateFileName('{0}/{1}'.format(getFileAddr('perf stat'), key), tid), 'r') as statObj:
-                    content = statObj.readlines()[3:-2]
-                    stat = stat.join(content)
+                content = readFile(generateFileName('{0}/{1}'.format(getFileAddr('perf stat'), key), tid), 3, -2)
+                stat = stat.join(content)
 
                 if key == "cpu":
                     table.add_row([criticalItems[key][tid]['name'], sum(criticalItems[key][tid]['cpuPercent']) / len(criticalItems[key][tid]['cpuPercent']) , report, stat])
