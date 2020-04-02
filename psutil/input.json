@@ -1,9 +1,9 @@
 {
 	"duration" : 15,
-	"sampleFrequency" : 5,
-	"outputDirectory" : "/root/psutil/result",
-	"auto mode" : {
-		"consecutiveThresholdExceedLimit" : 2
+	"sample_frequency" : 5,
+	"output_directory" : "/root/psutil/result",
+	"auto_mode" : {
+		"consecutive_threshold_exceed_limit" : 2
 	},
 	"cpu" : [
 		{
@@ -49,7 +49,7 @@
 			"trigger" : 6000
 		}		
 	],
-	"perf stat" : [
+	"perf_stat" : [
 		"dTLB-loads",
 		"dTLB-load-misses",
 		"dTLB-stores", 

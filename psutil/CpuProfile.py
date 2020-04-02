@@ -3,131 +3,131 @@ import threading
 import utils
 from collections import OrderedDict
 import time
-import globalVariable
+import global_variable
 import perf
 
 class CpuProfile:
     def __init__(self):
         pass
                     
-    def __getCpuPercent(self, proc, t):
+    def __get_cpu_percent(self, proc, t):
         total_percent = proc.cpu_percent(interval = 0.1)
         total_time = sum(proc.cpu_times())
         return total_percent * ((t.system_time + t.user_time)/total_time)
 
-    def __getThread(self, proc, thread, process, triggerLock) :
+    def __get_thread(self, proc, thread, process, trigger_lock) :
 
-        threadEntry = {}
-        threadEntry['tid'] = thread.id
+        thread_entry = {}
+        thread_entry['tid'] = thread.id
 
         t = psutil.Process(thread.id)
-        threadEntry['name'] = t.name()
+        thread_entry['name'] = t.name()
         try:
-            threadEntry['cpu_percent'] = self.__getCpuPercent(proc, thread)
+            thread_entry['cpu_percent'] = self.__get_cpu_percent(proc, thread)
         except:
-            threadEntry['cpu_percent'] = 0.0    
-        threadEntry['user_time'] = thread.user_time
-        threadEntry['system_time'] = thread.system_time   
+            thread_entry['cpu_percent'] = 0.0    
+        thread_entry['user_time'] = thread.user_time
+        thread_entry['system_time'] = thread.system_time   
         
-        with triggerLock: 
-            if globalVariable.autoMode and globalVariable.isTriggered == 0:
+        with trigger_lock: 
+            if global_variable.auto_mode and global_variable.is_triggered == 0:
                 if process.has_key('trigger'):
-                    if threadEntry['cpu_percent'] >= process['trigger']:
-                        perf.doPerfRecord()
-                        globalVariable.isTriggered = 1
+                    if thread_entry['cpu_percent'] >= process['trigger']:
+                        perf.do_perf_record()
+                        global_variable.is_triggered = 1
                 
-        return threadEntry
+        return thread_entry
     
 
-    def __getProcessSamples(self, proc, process, triggerLock) :
+    def __get_process_samples(self, proc, process, trigger_lock) :
         sample = {}
-        timeStamp = time.time()
-        sample[timeStamp] = {}
-        sample[timeStamp]['cpu_percent'] = proc.cpu_percent(interval = 0.1)
-        # sample[timeStamp]['threads'] = []
+        time_stamp = time.time()
+        sample[time_stamp] = {}
+        sample[time_stamp]['cpu_percent'] = proc.cpu_percent(interval = 0.1)
+        # sample[time_stamp]['threads'] = []
 
-        threadObjects = []
+        thread_objects = []
         for thread in proc.threads() :
-            if not sample[timeStamp].has_key('thread'):
-                sample[timeStamp]['threads'] = []
-            t = utils.CustomTimer(0, self.__getThread, [proc, thread, process, triggerLock])
+            if not sample[time_stamp].has_key('thread'):
+                sample[time_stamp]['threads'] = []
+            t = utils.CustomTimer(0, self.__get_thread, [proc, thread, process, trigger_lock])
             t.start()
-            threadObjects.append(t)
+            thread_objects.append(t)
             
-        for t in threadObjects:
-            sample[timeStamp]['threads'].append(t.join())
+        for t in thread_objects:
+            sample[time_stamp]['threads'].append(t.join())
 
         return sample
 
-    def __getProcessDetails(self, proc) :
-        processEntry = OrderedDict()
+    def __get_process_details(self, proc) :
+        process_entry = OrderedDict()
 
         try:
-            processEntry['pid'] = proc.pid
-            processEntry['name'] = proc.name()
-            processEntry['samples'] = []
+            process_entry['pid'] = proc.pid
+            process_entry['name'] = proc.name()
+            process_entry['samples'] = []
         except:
             pass
-        return processEntry
+        return process_entry
     
-    def __findIndex(self, data, proc) :
+    def __find_index(self, data, proc) :
         for index in range(len(data['all'])) :
             if proc.pid == data['all'][index]['pid'] :
                 return index
         return -1
 
-    def __collectNextProcessSample(self, cpu, cpuSamplingLock, triggerLock) :
+    def __collect_next_process_sample(self, cpu, cpu_sampling_lock, trigger_lock) :
         for process in cpu:
-            processName = process['name']
-            fileAddr = utils.getFileAddr(processName)
+            process_name = process['name']
+            file_addr = utils.get_file_addr(process_name)
 
-            with cpuSamplingLock:
-                data = utils.loadData(fileAddr)
+            with cpu_sampling_lock:
+                data = utils.load_data(file_addr)
 
-                if processName == 'all' :
+                if process_name == 'all' :
                     for proc in psutil.process_iter():
-                        index = self.__findIndex(data, proc)
+                        index = self.__find_index(data, proc)
                         if(index == -1):
-                            data[processName].append(self.__getProcessDetails(proc))
+                            data[process_name].append(self.__get_process_details(proc))
                             index = len(data['all']) - 1
-                        data[processName][index]['samples'].append(self.__getProcessSamples(proc, process, triggerLock))
+                        data[process_name][index]['samples'].append(self.__get_process_samples(proc, process, trigger_lock))
                 else :
                     try:
-                        pid = data[processName]["pid"]
-                        data[processName]['samples'].append(self.__getProcessSamples(psutil.Process(pid), process, triggerLock))
+                        pid = data[process_name]["pid"]
+                        data[process_name]['samples'].append(self.__get_process_samples(psutil.Process(pid), process, trigger_lock))
                     except:
                         pass
-                utils.writeFile(data, fileAddr)
+                utils.write_file(data, file_addr)
                 
-    def getCpuProfile(self, cpu, noOfSample, sampleFrequency, triggerLock):                    # making a room for process
-        cpuSamplingLock = threading.Lock()
+    def get_cpu_profile(self, cpu, no_of_sample, sample_frequency, trigger_lock):                    # making a room for process
+        cpu_sampling_lock = threading.Lock()
         
         for process in cpu:
-            processName = process['name']
+            process_name = process['name']
             output = {}
-            if processName == 'all' :
-                output[processName] = []
+            if process_name == 'all' :
+                output[process_name] = []
                 for proc in psutil.process_iter():
-                    output[processName].append(self.__getProcessDetails(proc))
+                    output[process_name].append(self.__get_process_details(proc))
             else :
-                output[processName] = {}
+                output[process_name] = {}
                 for proc in psutil.process_iter():
-                    if proc.name() == processName:
-                        output[processName] = self.__getProcessDetails(proc)
+                    if proc.name() == process_name:
+                        output[process_name] = self.__get_process_details(proc)
                         break
 
-            fileAddr = utils.getFileAddr(processName)
-            utils.writeFile(output, fileAddr)
+            file_addr = utils.get_file_addr(process_name)
+            utils.write_file(output, file_addr)
 
-        threadObjects = []
+        thread_objects = []
         delay = 0
-        while noOfSample > 0 :
-            tObj = threading.Timer(delay, self.__collectNextProcessSample, [cpu, cpuSamplingLock, triggerLock])
+        while no_of_sample > 0 :
+            tObj = threading.Timer(delay, self.__collect_next_process_sample, [cpu, cpu_sampling_lock, trigger_lock])
             tObj.start()
-            threadObjects.append(tObj)
-            delay += sampleFrequency
-            noOfSample -= 1
+            thread_objects.append(tObj)
+            delay += sample_frequency
+            no_of_sample -= 1
 
-        for tObj in threadObjects:
+        for tObj in thread_objects:
             tObj.join()
     

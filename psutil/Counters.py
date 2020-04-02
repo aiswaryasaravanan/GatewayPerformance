@@ -1,7 +1,7 @@
 import utils
 import time
 
-import globalVariable
+import global_variable
 import perf
 
 class Counters:
@@ -9,63 +9,50 @@ class Counters:
     def __init__(self):
         pass
     
-    def __getDpdkInterfaceNames(self):
-        dpdkPortsDump = utils.executeCommand('debug.py -v --dpdk_ports_dump')
-        dpdkPortsDump = eval(dpdkPortsDump)
-        dpdkInterfaceNames = []
-        for dump in dpdkPortsDump:
-            dpdkInterfaceNames.append(dump['name'])
-        return dpdkInterfaceNames
+    def __get_dpdk_interface_names(self):
+        dpdk_ports_dump = utils.execute_command('debug.py -v --dpdk_ports_dump')
+        dpdk_ports_dump = eval(dpdk_ports_dump)
+        dpdk_interface_names = []
+        for dump in dpdk_ports_dump:
+            dpdk_interface_names.append(dump['name'])
+        return dpdk_interface_names
 
-    def __getCounterSamples(self, counters, triggerLock):
-        dpdkInterfaceNames = self.__getDpdkInterfaceNames()
-        countersList = {}
-        for name in dpdkInterfaceNames:
-            countersList['dpdk_{0}_pstat_ierrors'.format(name)] = utils.executeCommand('{0} dpdk_{1}_pstat_ierrors'.format(utils.getCommandList('counters'), name))
-            countersList['dpdk_{0}_pstat_oerrors'.format(name)] = utils.executeCommand('{0} dpdk_{1}_pstat_oerrors'.format(utils.getCommandList('counters'), name))
-            countersList['dpdk_{0}_pstat_imissed'.format(name)] = utils.executeCommand('{0} dpdk_{1}_pstat_imissed'.format(utils.getCommandList('counters'), name))
+    def __get_counter_samples(self, counters, trigger_lock):
+        dpdk_interface_names = self.__get_dpdk_interface_names()
+        counters_list = {}
+        for name in dpdk_interface_names:
+            counters_list['dpdk_{0}_pstat_ierrors'.format(name)] = utils.execute_command('{0} dpdk_{1}_pstat_ierrors'.format(utils.get_command_list('counters'), name))
+            counters_list['dpdk_{0}_pstat_oerrors'.format(name)] = utils.execute_command('{0} dpdk_{1}_pstat_oerrors'.format(utils.get_command_list('counters'), name))
+            counters_list['dpdk_{0}_pstat_imissed'.format(name)] = utils.execute_command('{0} dpdk_{1}_pstat_imissed'.format(utils.get_command_list('counters'), name))
 
         for cntr in counters:
-            c = utils.CustomTimer(0, utils.executeCommand, ["{0} {1}".format(utils.getCommandList('counters'), cntr['name'])])        # actual
+            c = utils.CustomTimer(0, utils.execute_command, ["{0} {1}".format(utils.get_command_list('counters'), cntr['name'])])        # actual
             c.start()
-            countersList[cntr['name']] = c.join()
+            counters_list[cntr['name']] = c.join()
             
-        return countersList
+        return counters_list
 
-    def getCounters(self, counters, noOfSample, sampleFrequency, triggerLock) :
+    def get_counters(self, counters, no_of_sample, sample_frequency, trigger_lock) :
         output = {}
         output["counters"] = []
 
         delay = 0
-        while noOfSample > 0 :
-            noOfSample -= 1
+        while no_of_sample > 0 :
+            no_of_sample -= 1
             sample = {}
             
-            c = utils.CustomTimer(delay, self.__getCounterSamples, [counters, triggerLock])
+            c = utils.CustomTimer(delay, self.__get_counter_samples, [counters, trigger_lock])
             c.start()
 
             sample[time.time()] = c.join()
             output['counters'].append(sample)
-            delay = sampleFrequency                        # for now
+            delay = sample_frequency                        # for now
             
-            # with triggerLock:
-            #     if globalVariable.autoMode and globalVariable.isTriggered == 0:
-            #         outputPoisoned = Counters.Counters.poisonCounters(output)
-
-            #         index = len(outputPoisoned['counters']) - 1
-            #         TS = outputPoisoned['counters'][index]
-            #         for counter in TS[TS.items()[0][0]]:
-            #             if counter.has_key('trigger'):
-            #                 if counter['trigger'] >= counter['trigger']:
-            #                     print('triggered - > counter')
-            #                     perf.doPerfRecord()
-            #                     isTriggered = 1
-
-        fileAddr = utils.getFileAddr("counters")
-        utils.writeFile(output, fileAddr)
+        file_addr = utils.get_file_addr("counters")
+        utils.write_file(output, file_addr)
         
     @staticmethod
-    def poisonCounters(counters) :
+    def poison_counters(counters) :
         flag = 1
         for TS in counters['counters']:
             if flag :
@@ -74,8 +61,8 @@ class Counters:
                 continue
 
             for counter in TS[TS.items()[0][0]]:
-                TS[TS.items()[0][0]][counter] = utils.modifyDrop(int(pre[pre.items()[0][0]][counter]))
+                TS[TS.items()[0][0]][counter] = utils.modify_drop(int(pre[pre.items()[0][0]][counter]))
             pre = TS
 
-        # utils.writeFile(counters, utils.getFileAddr('counters'))
+        # utils.writeFile(counters, utils.get_file_addr('counters'))
         return counters
