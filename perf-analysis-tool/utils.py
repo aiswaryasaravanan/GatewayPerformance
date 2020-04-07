@@ -8,31 +8,8 @@ from prettytable import PrettyTable
 
 import random
 import global_variable
+from diag.perf.global_variable_perf import *
 
-files = {
-    "all" : "temp_result/cpu/all.json",
-    "edged" : "temp_result/cpu/edged.json",
-    "dbus-daemon" : "temp_result/cpu/dbus-daemon.json",
-    "handoff" : "temp_result/commands/handoff.json",
-    "counters" : "temp_result/counters.json",
-    "perf_stat" : "temp_result/perf/stat",
-    "perf_report" : "temp_result/perf/report",
-    # "perf_report2" : "temp_result/perf/report2"
-}
-
-command_list = {
-    "handoff" : "debug.py -v --handoff ",
-    "counters" : "getcntr -c",
-    "perf_stat" : "perf stat"
-}
-
-def get_target_function(target_function, key):
-    if not target_function.has_key(key):
-        target_function.setdefault(key, get_custom_commands)
-    return target_function[key]
-
-def get_custom_commands(file_name, command, no_of_sample, sample_frequency, lock):
-    command_output = execute_command('{0} > {1}'.format(get_command_list(command['name']), file_name))
 
 class CustomTimer(_Timer):
     def __init__(self, interval, function, args=[], kwargs={}):
@@ -85,26 +62,27 @@ def write_txt_file(output, file_addr) :
     with open(file_addr, "w") as wObj:        
         wObj.write(output)
 
-def get_file_addr(key):
-    if not files.has_key(key):
-        files.setdefault(key, 'temp_result/commands/{0}.txt'.format(key.split(' ')[0]))
-    return files[key]
+def get_file_addr(file_list, file, *args):
+    if not file_list.has_key(file):
+        return generate_file_name(file.split(' ')[0], args[0], args[1])
+        # file_list.setdefault(file, 'temp_result/{0}/{1}.txt'.format(directory, file.split(' ')[0]))
+    return file_list[file]
 
-def get_command_list(key):
-    if command_list.has_key(key):
-        return command_list[key]
-    return key                         # for custom commands
+def get_command_list(command_list, command):
+    if command_list.has_key(command):
+        return command_list[command]
+    return command                         # for custom commands
 
 def execute_command(command) :
     result = commands.getoutput(command)
     return result
 
-def generate_file_name(directory, pid) :
-    file_name = directory + '/' + str(pid) + '.txt'
+def generate_file_name(name, directory, file_type) :
+    file_name = directory + '/' + str(name) + '.' + file_type
     return file_name
 
 def get_no_of_sample(sample_frequency, duration):
-    no_of_sample = (duration / sample_frequency) + 1
+    no_of_sample = int(duration / sample_frequency) + 1
     return no_of_sample
 
 def delete_temporary_files():
@@ -112,36 +90,41 @@ def delete_temporary_files():
     clear_directory('temp_result')
     global_variable.is_triggered = False          # reset
     
-def is_file_exists(file_name, directory):
-    if os.path.exists('temp_result/perf') and execute_command('find {0} -name {1}'.format(directory, file_name)):
+# def is_file_exists(file_name, directory):
+    # if os.path.exists('temp_result/perf') and execute_command('find {0} -name {1}'.format(directory, file_name)):
+def is_file_exists(file_name):
+    if os.path.exists(file_name):
         return 1
     return 0
+
+def list_files(directory):
+    return os.listdir(directory)
 
 def modify_drop(drop) :
     drop += random.randint(1, 1000)
     return drop
 
-def check_and_delete(output_directory, window_size):
-    available_zip = execute_command("find {0} -maxdepth 1 -name '*.zip'".format(output_directory))
+def check_and_delete():
+    available_zip = execute_command("find {0} -maxdepth 1 -name '*.zip'".format(global_variable.output_directory))
     available_zip = (available_zip.split('\n'))
     available_zip.sort()
-    if len(available_zip) >= window_size:
+    if len(available_zip) >= global_variable.window_size:
         sts = execute_command('rm {0}'.format(available_zip[0]))
 
-def zip_output(output_directory, time_stamp):
+def zip_output(time_stamp):
     # move_directory('{0}/temp_result'.format(output_directory), '{0}/diag_dump_{1}'.format(output_directory, time_stamp))
     # path = '{0}/diag_dump_{1}'.format(output_directory, time_stamp)
     path = 'temp_result'
 
-    check_and_delete(output_directory, global_variable.window_size)
+    check_and_delete()
 
-    with ZipFile('/{0}/diag_dump_{1}.zip'.format(output_directory, time_stamp),'w') as zip:
+    with ZipFile('/{0}/diag_dump_{1}.zip'.format(global_variable.output_directory, time_stamp),'w') as zip:
         for root, directories, files in os.walk(path):
             for file_name in files:
                 filepath = os.path.join(root, file_name)
                 zip.write(filepath)
 
-def unzip_output(file_name, output_directory):
+def unzip_output(file_name):
     with ZipFile(file_name, "r") as zip:
         zip.extractall()
         
@@ -149,18 +132,20 @@ def create_summary(critical_items):
     print('\n\tSummary Report\n')
     for key in critical_items:
         count = 0 
-        table = PrettyTable()
+        # table = PrettyTable()
         fields = []
         print(key)
         if key == 'cpu':
             fields = ['Thread Name', key]
+            table = PrettyTable(fields)
             for tid in critical_items[key]:
                 if count > 3:
                     break
                 table.add_row([critical_items[key][tid]['name'], sum(critical_items[key][tid]['cpu_percent']) / len(critical_items[key][tid]['cpu_percent'])])
                 count += 1
         elif key == 'drops':
-            ['Handoff Queue Name', key]
+            fields = ['Handoff Queue Name', key]
+            table = PrettyTable(fields)
             for tid in critical_items[key]:
                 if count > 3:
                     break
@@ -170,6 +155,7 @@ def create_summary(critical_items):
                 count += 1
         elif key == 'counters':
             fields = ['Counter Name', 'drops']
+            table = PrettyTable(fields)
             for name in critical_items[key]:
                 if count > 3:
                     break
@@ -189,7 +175,7 @@ def read_file(file_addr, from_line, to_line):
     with open (file_addr, 'r') as obj:
         content = obj.readlines()[from_line: to_line]
         return content
-
+    
 def print_table(critical_items):
     for key in critical_items:
         if key == 'cpu':
@@ -206,15 +192,16 @@ def print_table(critical_items):
             for tid in critical_items[key]:
                 
                 report = []
-                for cnt in range(global_variable.record_count):
+                for cnt in range(global_variable_perf.number_of_record):
                     report.append('Report_{0}\n'.format(cnt + 1))
                     rep = ''
-                    content = read_file(generate_file_name('{0}/{1}'.format(get_file_addr('perf_report') + str(cnt + 1), key), tid), 8, -4)
+                    # content = read_file('{0}/{1}.txt'.format(get_file_addr(files, 'report') + str(cnt + 1), str(tid)), 8, -4)
+                    content = read_file(generate_file_name(str(tid), '{0}/{1}'.format(get_file_addr(global_variable_perf.files, 'report') + str(cnt + 1), key), 'txt'), 8, -4)
                     report.append(rep.join(content))
                 report = ''.join(report)
                                 
                 stat = ''
-                content = read_file(generate_file_name('{0}/{1}'.format(get_file_addr('perf_stat'), key), tid), 3, -2)
+                content = read_file(generate_file_name(str(tid), '{0}/{1}'.format(get_file_addr(global_variable_perf.files, 'stat'), key), 'txt'), 3, -2)
                 stat = stat.join(content)
 
                 if key == "cpu":

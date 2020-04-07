@@ -12,7 +12,8 @@ def get_hardware_info(manifest):
 
 def get_build_info(manifest):
     manifest['version'] = utils.execute_command('edged -v | grep Version').split(':\t ')[1]
-    manifest['build'] = utils.execute_command('edged -v | grep Hash').split(':\t ')[1]
+    manifest['buildHash'] = utils.execute_command('edged -v | grep Hash').split(':\t ')[1]
+    manifest['buildRev'] = utils.execute_command('edged -v | grep rev').split(':\t ')[1]
     return manifest
 
 def get_logical_id(manifest):

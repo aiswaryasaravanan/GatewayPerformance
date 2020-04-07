@@ -1,8 +1,9 @@
 import utils
 from collections import OrderedDict, defaultdict
 
-import Counters
-import Handoff
+from Counters import Counters
+from Commands import Commands
+from CpuProfile import CpuProfile
 
 def get_top_10(data):
     top_10 = OrderedDict()
@@ -16,17 +17,19 @@ def get_top_10(data):
     return top_10
 
 def counter_based_critical_items():
-    counters = utils.load_data(utils.get_file_addr('counters'))
-    counters = Counters.Counters.poison_counters(counters)
-
+    file_list = utils.list_files(Counters.temp_directory)
+    
     critical_items = defaultdict()
+    for file_ in file_list:
+        counters = utils.load_data('{0}/{1}'.format(Counters.temp_directory, file_))
+        counters = Counters.poison_counters(counters)
 
-    for TS in counters['counters']:
-        for counter in TS[TS.items()[0][0]]:
-            drop = TS[TS.items()[0][0]][counter]
-            if not critical_items.has_key(counter):
-                critical_items[counter] = []
-            critical_items[counter].append(int(drop))
+        for TS in counters['counters']:
+            for counter in TS[TS.items()[0][0]]:
+                drop = TS[TS.items()[0][0]][counter]
+                if not critical_items.has_key(counter):
+                    critical_items[counter] = []
+                critical_items[counter].append(int(drop))
 
     sorted_res = OrderedDict()
     for key, value in sorted(critical_items.items(), key = lambda item : item[1][len(item[1]) - 1] - item[1][0], reverse =True):
@@ -35,18 +38,18 @@ def counter_based_critical_items():
     return get_top_10(sorted_res)
 
 def drop_based_critical_items():
-    handoff = utils.load_data(utils.get_file_addr("handoff")) 
-    handoff = Handoff.Handoff.poison_queue(handoff)
+    handoff = utils.load_data(utils.get_file_addr(Commands.files, "handoff")) 
+    handoff = Commands.poison_queue(handoff)
 
     critical_items = defaultdict(dict)
 
-    for ts in handoff["handoff"]:
-        TS = ts.items()[0][0]
-        for queue in ts[TS]['handoffq']:
-                critical_items[queue['tid']]['name'] = queue['name']        # TODO : has_key()
-                if not critical_items[queue['tid']].has_key('drops') :
-                    critical_items[queue['tid']]['drops'] = []                
-                critical_items[queue['tid']]['drops'].append(queue['drops'])
+    for TS in handoff["handoff"]:
+        ts = TS.items()[0][0]
+        for queue in TS[ts]['handoffq']:
+            critical_items[queue['tid']]['name'] = queue['name']        # TODO : has_key()
+            if not critical_items[queue['tid']].has_key('drops') :
+                critical_items[queue['tid']]['drops'] = []                
+            critical_items[queue['tid']]['drops'].append(queue['drops'])
 
     sorted_res = OrderedDict()
     
@@ -56,7 +59,7 @@ def drop_based_critical_items():
     return get_top_10(sorted_res)
 
 def cpu_based_critical_items():
-    data = utils.load_data(utils.get_file_addr("all"))
+    data = utils.load_data(utils.get_file_addr(CpuProfile.files, "all"))
     critical_items = defaultdict(dict)
 
     for process in data["all"] :
@@ -75,9 +78,14 @@ def cpu_based_critical_items():
 
     return get_top_10(sorted_res)
 
-def extract_critical_items(input):
+def extract_critical_items(analysis_list):
     critical_items = defaultdict(dict)
-    critical_items['cpu'] = cpu_based_critical_items()
-    critical_items['drops'] = drop_based_critical_items()
-    critical_items['counters'] = counter_based_critical_items()
+    for category in analysis_list:
+        if category == 'cpu':
+            critical_items['cpu'] = cpu_based_critical_items()
+        elif category == 'handoff_drops':
+            critical_items['drops'] = drop_based_critical_items()
+        elif category == 'counters':
+            critical_items['counters'] = counter_based_critical_items()
+            
     return critical_items
