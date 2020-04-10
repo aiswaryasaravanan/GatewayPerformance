@@ -10,7 +10,8 @@ import utils
 class CounterMonitor:
     temp_directory = global_variable.temp_directory + 'counters' 
     files = {
-        "dpdk_counters" : "{0}/dpdk_counters.json".format(temp_directory)
+        # "dpdk_counters" : "{0}/dpdk_counters.json".format(temp_directory)
+        "counters" : '{0}/counter.json'.format(temp_directory)
     }
     command_list = {
         "counters" : "getcntr -c",
@@ -24,7 +25,7 @@ class CounterMonitor:
         else:
             self.trigger = None
         self.parsed_output = {}
-        self.file_addr = utils.get_file_addr(CounterMonitor.files, self.name, CounterMonitor.temp_directory, 'json')
+        self.file_addr = utils.get_file_addr(CounterMonitor.files, 'counters', CounterMonitor.temp_directory, 'json')
     
     def __get_dpdk_interface_names(self):
         dpdk_ports_dump = utils.execute_command(utils.get_command_list(CounterMonitor.command_list, 'dpdk_interface'))
