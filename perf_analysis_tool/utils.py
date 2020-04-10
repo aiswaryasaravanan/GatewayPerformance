@@ -28,8 +28,6 @@ class CustomTimer(_Timer):
 def create_directory(directory) :
     try :
         os.mkdir(directory)
-        # print(directory + 'created')
-        # print(os.path.exists('temp_result/{0}'.format(directory)))
     except :
         if os.path.exists(directory):                            # File exists
             pass
@@ -90,12 +88,9 @@ def get_no_of_sample(sample_frequency, duration):
     return no_of_sample
 
 def delete_temporary_files():
-    # clear_directory('diag_dump_{0}'.format(time_stamp))
     clear_directory('temp_result')
     global_variable.is_triggered = False          # reset
     
-# def is_file_exists(file_name, directory):
-    # if os.path.exists('temp_result/perf') and execute_command('find {0} -name {1}'.format(directory, file_name)):
 def is_file_exists(file_name):
     if os.path.exists(file_name):
         return 1
@@ -105,6 +100,7 @@ def list_files(directory):
     return os.listdir(directory)
 
 def modify_drop(drop) :
+    drop = int(drop)
     drop += random.randint(1, 1000)
     return drop
 
@@ -199,7 +195,6 @@ def print_table(critical_items):
                 for cnt in range(global_variable_perf.number_of_record):
                     report.append('Report_{0}\n'.format(cnt + 1))
                     rep = ''
-                    # content = read_file('{0}/{1}.txt'.format(get_file_addr(files, 'report') + str(cnt + 1), str(tid)), 8, -4)
                     content = read_file(generate_file_name(str(tid), '{0}/{1}'.format(get_file_addr(global_variable_perf.files, 'report') + str(cnt + 1), key), 'txt'), 8, -4)
                     report.append(rep.join(content))
                 report = ''.join(report)

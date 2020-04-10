@@ -106,10 +106,10 @@ class CpuMonitor:
             proc = CpuMonitor.get_proc_object(self.name)
             self.parsed_output[self.name] = self.__get_details(proc)
         
-        self.call_repeatedly(self.__collect_sample)
+        self.__call_repeatedly(self.__collect_sample)
         CpuMonitor.dump_output(self.parsed_output, self.file_addr)
         
-    def call_repeatedly(self, target_fun):
+    def __call_repeatedly(self, target_fun):
         thread_objects = []
         for sample_count in range(global_variable.no_of_sample):
             tObj = threading.Thread(target = target_fun)

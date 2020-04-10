@@ -30,12 +30,14 @@ class Commands():
             current_output[time.time()] = eval(command_output)
             self.parsed_output[self.name].append(current_output)
             
+            self.parsed_output = Commands.poison_queue(self.parsed_output)
+            
             with global_variable.trigger_lock:
                 if global_variable.auto_mode and global_variable.is_triggered == 0:
-                    output_poisoned = Commands.poison_queue(self.parsed_output)
+                    # output_poisoned = Commands.poison_queue(self.parsed_output)
 
-                    index = len(output_poisoned['handoff']) - 1
-                    TS = output_poisoned['handoff'][index]
+                    index = len(self.parsed_output['handoff']) - 1
+                    TS = self.parsed_output['handoff'][index]
                     for queue in TS[TS.items()[0][0]]['handoffq']:
                         try:
                             if queue['drops'] >= self.trigger:
@@ -75,21 +77,21 @@ class Commands():
             tObj.join()
             
         Commands.dump_output(self.parsed_output, self.file_addr, self.file_type)
-        
+            
     @staticmethod
     def poison_queue(handoff) :
-        
-        flag = 1
-        for ts in handoff["handoff"] :
-            if flag :
-                pre = ts
-                flag = 0
-                continue
-
-            for queue in range(len(ts[ts.items()[0][0]]["handoffq"])) :
-                ts[ts.items()[0][0]]["handoffq"][queue]["drops"] = utils.modify_drop(pre[pre.items()[0][0]]["handoffq"][queue]["drops"])
-            pre = ts
-
+        length = len(handoff['handoff'])
+        if length == 1:
+            pass
+        else:
+            current_index = length - 1
+            previous_timestamp_entry = handoff['handoff'][current_index - 1]
+            pre_TS = previous_timestamp_entry.items()[0][0]
+            current_timestamp_entry = handoff['handoff'][current_index]
+            cur_TS = current_timestamp_entry.items()[0][0]
+            for queue in range(len(current_timestamp_entry[cur_TS]['handoffq'])):
+                current_timestamp_entry[cur_TS]['handoffq'][queue]['drops'] = utils.modify_drop(previous_timestamp_entry[pre_TS]['handoffq'][queue]['drops'])
+     
         return handoff
                 
     @staticmethod
