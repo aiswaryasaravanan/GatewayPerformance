@@ -1,3 +1,6 @@
+import sys
+sys.path.append('perf_analysis_tool')
+
 import argparse
 import threading
 from collections import defaultdict, OrderedDict
@@ -5,14 +8,14 @@ import subprocess
 import time
 import os
 
-import CpuProfile
-import Counters
-import Commands
-import utils
-import manifest
-import critical_threads
-import perf
-import global_variable
+from monitor.counter_monitor import CounterMonitor 
+from monitor.command_monitor import Commands 
+from monitor.cpu_monitor import CpuMonitor 
+from analysis import root_cause_analysis
+from diag.perf import perf
+import utils as utils
+import manifest 
+import global_variable 
 
 def parse_command_line_arguments():
     parser = argparse.ArgumentParser()
@@ -20,25 +23,25 @@ def parse_command_line_arguments():
     args = parser.parse_args()
     return vars(args)
 
-def get_diag_dump(monitor, meta_record):
+def get_diag_dump(monitor):
     global_variable.trigger_lock = threading.Lock()
     thread_list = []
     for key in monitor.keys():
         if key == "cpu":
             for process in monitor['cpu']:
-                cpu = CpuProfile.CpuProfile(process)
+                cpu = CpuMonitor(process)
                 t1 = threading.Thread(target = cpu.get_cpu_profile)
                 t1.start()
                 thread_list.append(t1)
         elif key == "commands" :
             for command in monitor[key]:
-                cmd = Commands.Commands(command)
+                cmd = Commands(command)
                 t2 = threading.Thread(target = cmd.get_command_output)
                 t2.start()
                 thread_list.append(t2)
         elif key == "counters" :
             for counter in monitor[key]:
-                cntr = Counters.Counters(counter)
+                cntr = CounterMonitor(counter)
                 t3 = threading.Thread(target = cntr.get_counters)                
                 t3.start()
                 thread_list.append(t3)
@@ -63,23 +66,23 @@ def init_global_variable(input):
         global_variable.is_triggered = None
         global_variable.trigger_lock = None
         
-def do_perf_diag(critical_items, perf):
-    if not global_variable.auto_mode:
-        perf.do_perf_record()
-        perf.do_perf_sched()
+def init(input):
+    utils.clear_directory(global_variable.temp_directory)
+    init_global_variable(input)
+    for diag_key in input['diag']:
+        if diag_key == 'perf':
+            perf_list = input['diag']['perf']
+            perf.init(perf_list['record'], perf_list['sched'], perf_list['stat'])
+            
+    utils.create_directory(global_variable.output_directory)
 
-    perf.collect_perf_report(critical_items)
-    perf.collect_perf_stat(critical_items)
-    perf.collect_perf_latency()
                     
 def main():
 
     input = utils.load_data("input.json")    
-    init_global_variable(input)
     
-    utils.clear_directory(global_variable.temp_directory)
-    utils.create_directory(global_variable.output_directory)
-    
+    init(input)
+        
     arg_dict = parse_command_line_arguments()
 
     if arg_dict.items()[0][1] != None:            # cmdline arg is there
@@ -87,7 +90,7 @@ def main():
         # utils.unzip_output(arg_dict.items()[0][1], input['output_directory'])
         # critical_items = critical_threads.extract_critical_items(input)
         # perf.collect_perf_report(critical_items)
-        # perf.collect_perf_stat(input['diag']['perf']['stat'], critical_items)
+        # perf.collect_perf_stat(critical_items)
         # utils.create_summary(critical_items)
         # utils.print_table(critical_items)
         # utils.delete_temporary_files()            
@@ -103,10 +106,7 @@ def main():
             get_diag_dump(input['monitor'])
             manifest.create_manifest()
 
-            critical_items = critical_threads.extract_critical_items(input['analysis'])
-
-            if input['diag']['perf']:
-                do_perf_diag(critical_items, input['diag']['perf'])
+            critical_items = root_cause_analysis.extract_critical_items(input['analysis'], input['diag'])
 
             utils.create_summary(critical_items)
             utils.print_table(critical_items)

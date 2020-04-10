@@ -53,8 +53,9 @@
 		]
 	},
 	"analysis" : [
-		"counters",
-		"handoff_drops"
+		"cpu",
+		"handoff_drops",
+		"counters"
 	],
 	"diag" : {
 		"perf" : {

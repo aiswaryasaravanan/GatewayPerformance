@@ -1,9 +1,23 @@
-import utils
+import sys
+sys.path.append('perf_analysis_tool')
+
 from collections import OrderedDict, defaultdict
 
-from Counters import Counters
-from Commands import Commands
-from CpuProfile import CpuProfile
+import utils
+import global_variable
+from monitor.counter_monitor import CounterMonitor
+from monitor.command_monitor import Commands
+from monitor.cpu_monitor import CpuMonitor
+from diag.perf import perf
+
+def do_perf_diag(critical_items):
+    if not global_variable.auto_mode:
+        perf.do_perf_record()
+        perf.do_perf_sched()
+
+    perf.collect_perf_report(critical_items)
+    perf.collect_perf_stat(critical_items)
+    perf.collect_perf_latency()
 
 def get_top_10(data):
     top_10 = OrderedDict()
@@ -17,12 +31,12 @@ def get_top_10(data):
     return top_10
 
 def counter_based_critical_items():
-    file_list = utils.list_files(Counters.temp_directory)
+    file_list = utils.list_files(CounterMonitor.temp_directory)
     
     critical_items = defaultdict()
     for file_ in file_list:
-        counters = utils.load_data('{0}/{1}'.format(Counters.temp_directory, file_))
-        counters = Counters.poison_counters(counters)
+        counters = utils.load_data('{0}/{1}'.format(CounterMonitor.temp_directory, file_))
+        counters = CounterMonitor.poison_counters(counters)
 
         for TS in counters['counters']:
             for counter in TS[TS.items()[0][0]]:
@@ -59,7 +73,7 @@ def drop_based_critical_items():
     return get_top_10(sorted_res)
 
 def cpu_based_critical_items():
-    data = utils.load_data(utils.get_file_addr(CpuProfile.files, "all"))
+    data = utils.load_data(utils.get_file_addr(CpuMonitor.files, "all"))
     critical_items = defaultdict(dict)
 
     for process in data["all"] :
@@ -78,8 +92,8 @@ def cpu_based_critical_items():
 
     return get_top_10(sorted_res)
 
-def extract_critical_items(analysis_list):
-    critical_items = defaultdict(dict)
+def extract_critical_items(analysis_list, diag_list):
+    critical_items = OrderedDict()
     for category in analysis_list:
         if category == 'cpu':
             critical_items['cpu'] = cpu_based_critical_items()
@@ -87,5 +101,8 @@ def extract_critical_items(analysis_list):
             critical_items['drops'] = drop_based_critical_items()
         elif category == 'counters':
             critical_items['counters'] = counter_based_critical_items()
+            
+    if diag_list.has_key('perf'):
+        do_perf_diag(critical_items)
             
     return critical_items

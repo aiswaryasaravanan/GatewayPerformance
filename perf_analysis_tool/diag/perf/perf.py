@@ -1,10 +1,14 @@
-import utils
+import sys
+sys.path.append('perf_analysis_tool')
+
 import os
 import time
 import subprocess
-from perf import global_variable_perf
 
-def perf_init(record, sched, stat):
+import utils
+from diag.perf import global_variable_perf 
+
+def init(record, sched, stat):
     utils.create_directory(utils.get_file_addr(global_variable_perf.files, 'record'))
     utils.create_directory(utils.get_file_addr(global_variable_perf.files, 'report'))
     utils.create_directory(utils.get_file_addr(global_variable_perf.files, 'sched'))
@@ -23,6 +27,7 @@ def perf_init(record, sched, stat):
 def do_perf_record() :
     FNULL = open(os.devnull, 'w')
     for cnt in range(global_variable_perf.number_of_record):
+        print("{0} -F {1} -o perf_record_{2}.data -- sleep {3} &".format(utils.get_command_list(global_variable_perf.command_list, 'record'), global_variable_perf.frequency, cnt+1, global_variable_perf.sleep_record))
         sts = subprocess.Popen("{0} -F {1} -o perf_record_{2}.data -- sleep {3} &".format(utils.get_command_list(global_variable_perf.command_list, 'record'), global_variable_perf.frequency, cnt+1, global_variable_perf.sleep_record), shell = True, stdout = FNULL, stderr = subprocess.STDOUT)
         time.sleep(global_variable_perf.delay_between_record)       # on pupose
    
@@ -42,7 +47,7 @@ def collect_perf_stat(critical_items) :
                 
 def do_report(directory, input_file, tid):
     file_name = utils.generate_file_name(str(tid), directory, 'txt')
-    # res = executeCommand("perf report --tid={0} --stdio > {1}".format(tid, fileName))
+    print("{0} --tid={1} -i {2} > {3}".format(utils.get_command_list(global_variable_perf.command_list, 'report'), tid, input_file, file_name))
     res = utils.execute_command("{0} --tid={1} -i {2} > {3}".format(utils.get_command_list(global_variable_perf.command_list, 'report'), tid, input_file, file_name))
     
 def collect_perf_report(critical_items):    
@@ -72,19 +77,23 @@ def collect_perf_report(critical_items):
                 utils.create_directory(directory)
                 for tid in critical_items[key]:
                     do_report(directory, input_file, tid)
-                    
+                             
 def do_perf_sched():
     FNULL = open(os.devnull, 'w')
     for cnt in range(global_variable_perf.number_of_sched):
-        sts = subprocess.Popen("{0} -o perf_sched_{1}  sleep {2} &".format(utils.get_command_list(global_variable_perf.command_list, 'sched'), cnt+1, global_variable_perf.sleep_sched), shell = True, stdout = FNULL, stderr = subprocess.STDOUT)
+        print("{0} -o perf_sched_{1}.data sleep {2} &".format(utils.get_command_list(global_variable_perf.command_list, 'sched'), cnt+1, global_variable_perf.sleep_sched))
+        sts = subprocess.Popen("{0} -o perf_sched_{1}.data sleep {2} &".format(utils.get_command_list(global_variable_perf.command_list, 'sched'), cnt+1, global_variable_perf.sleep_sched), shell = True, stdout = FNULL, stderr = subprocess.STDOUT)
         time.sleep(global_variable_perf.delay_between_sched)       # on pupose
         
-def do_perf_latency(cnt):
-    sts = utils.execute_command('{0} -i perf_sched_{1} > {2}/perf_latency_{3}.txt'.format(utils.get_command_list(global_variable_perf.command_list, 'latency'), cnt, cnt))
-        
+def do_perf_latency(input_file, output_file):
+    print('{0} -i {1} > {2}'.format(utils.get_command_list(global_variable_perf.command_list, 'latency'), input_file, output_file))
+    sts = utils.execute_command('{0} -i {1} > {2}'.format(utils.get_command_list(global_variable_perf.command_list, 'latency'), input_file, output_file))
+
 def collect_perf_latency():   
-    wait = 0                    
+    wait = 0       
+    print(utils.execute_command("ps aux | grep 'perf sched' | grep -v grep | awk '{print $2}'"))             
     while utils.execute_command("ps aux | grep 'perf sched' | grep -v grep | awk '{print $2}'"):
+        print('in progress')
         if wait >= 15:
             print('killing')
             pids = []
@@ -95,10 +104,14 @@ def collect_perf_latency():
             
         wait += 1
         time.sleep(1)
-        print('waiting for perf record to complete...')
+        print('waiting for perf sched to complete...')
         continue
     
-    for cnt in range(global_variable_perf.number_of_sched):
-        os.rename('perf_sched_{0}.data'.format(cnt+1), '{0}/perf_sched_{1}.data'.format(utils.get_file_addr(global_variable_perf.files, 'sched'), cnt+1))
-        do_perf_latency(cnt+1)        
+    print(utils.execute_command("ps aux | grep 'perf sched' | grep -v grep | awk '{print $2}'"))
     
+    for cnt in range(global_variable_perf.number_of_sched):
+        sched_file = '{0}/perf_sched_{1}.data'.format(utils.get_file_addr(global_variable_perf.files, 'sched'), cnt+1)
+        latency_file = '{0}/perf_latency_{1}.txt'.format(utils.get_file_addr(global_variable_perf.files, 'latency'), cnt+1)
+        os.rename('perf_sched_{0}.data'.format(cnt+1), sched_file)
+        do_perf_latency(sched_file, latency_file)
+          

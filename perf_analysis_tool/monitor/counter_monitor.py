@@ -1,10 +1,13 @@
-import utils
+import sys
+sys.path.append('perf_analysis_tool')
+
 import time
 
 import global_variable
-import perf
+from diag.perf import perf
+import utils
 
-class Counters:
+class CounterMonitor:
     temp_directory = global_variable.temp_directory + 'counters' 
     files = {
         "dpdk_counters" : "{0}/dpdk_counters.json".format(temp_directory)
@@ -21,10 +24,10 @@ class Counters:
         else:
             self.trigger = None
         self.parsed_output = {}
-        self.file_addr = utils.get_file_addr(Counters.files, self.name, Counters.temp_directory, 'json')
+        self.file_addr = utils.get_file_addr(CounterMonitor.files, self.name, CounterMonitor.temp_directory, 'json')
     
     def __get_dpdk_interface_names(self):
-        dpdk_ports_dump = utils.execute_command(utils.get_command_list(Counters.command_list, 'dpdk_interface'))
+        dpdk_ports_dump = utils.execute_command(utils.get_command_list(CounterMonitor.command_list, 'dpdk_interface'))
         dpdk_ports_dump = eval(dpdk_ports_dump)
         dpdk_interface_names = []
         for dump in dpdk_ports_dump:
@@ -35,15 +38,15 @@ class Counters:
         dpdk_interface_names = self.__get_dpdk_interface_names()
         current_output = {}
         for name in dpdk_interface_names:
-            current_output['dpdk_{0}_pstat_ierrors'.format(name)] = utils.execute_command('{0} dpdk_{1}_pstat_ierrors'.format(utils.get_command_list(Counters.command_list, 'counters'), name))
-            current_output['dpdk_{0}_pstat_oerrors'.format(name)] = utils.execute_command('{0} dpdk_{1}_pstat_oerrors'.format(utils.get_command_list(Counters.command_list, 'counters'), name))
-            current_output['dpdk_{0}_pstat_imissed'.format(name)] = utils.execute_command('{0} dpdk_{1}_pstat_imissed'.format(utils.get_command_list(Counters.command_list, 'counters'), name))
+            current_output['dpdk_{0}_pstat_ierrors'.format(name)] = utils.execute_command('{0} dpdk_{1}_pstat_ierrors'.format(utils.get_command_list(CounterMonitor.command_list, 'counters'), name))
+            current_output['dpdk_{0}_pstat_oerrors'.format(name)] = utils.execute_command('{0} dpdk_{1}_pstat_oerrors'.format(utils.get_command_list(CounterMonitor.command_list, 'counters'), name))
+            current_output['dpdk_{0}_pstat_imissed'.format(name)] = utils.execute_command('{0} dpdk_{1}_pstat_imissed'.format(utils.get_command_list(CounterMonitor.command_list, 'counters'), name))
         self.auto_trigger_check(current_output)
         return current_output
 
     def __get_counter_samples(self):
         current_output = {}
-        current_output[self.name] = utils.execute_command("{0} {1}".format(utils.get_command_list(Counters.command_list, 'counters'), self.name))   
+        current_output[self.name] = utils.execute_command("{0} {1}".format(utils.get_command_list(CounterMonitor.command_list, 'counters'), self.name))   
         self.auto_trigger_check(current_output)    
         return current_output
     
@@ -75,7 +78,7 @@ class Counters:
             self.parsed_output['counters'].append(current_sample)
             time.sleep(global_variable.sample_frequency)
             
-        Counters.dump_output(self.parsed_output, self.file_addr)
+        CounterMonitor.dump_output(self.parsed_output, self.file_addr)
         
                     
     @staticmethod
@@ -95,10 +98,10 @@ class Counters:
             
     @staticmethod
     def dump_output(parsed_output, file_addr):
-        # if utils.is_file_exists(file_addr):
+        # if is_file_exists(file_addr):
         #     print('inside if')
         #     flag = 0
-        #     file_output = utils.load_data(file_addr)
+        #     file_output = load_data(file_addr)
         #     for TS_parsed_output in parsed_output['counters']:
         #         for TS_file_output in file_output['counters']:
         #             if TS_parsed_output.items()[0][0] == TS_file_output.items()[0][0]:
@@ -113,7 +116,7 @@ class Counters:
         #     parsed_output = file_output
         # else:
         #     print("inside else")
-        #     utils.create_directory(Counters.temp_directory)
-        # utils.write_file(parsed_output, file_addr)
-        utils.create_directory(Counters.temp_directory)
+        #     create_directory(CounterMonitor.temp_directory)
+        # write_file(parsed_output, file_addr)
+        utils.create_directory(CounterMonitor.temp_directory)
         utils.write_file(parsed_output, file_addr)

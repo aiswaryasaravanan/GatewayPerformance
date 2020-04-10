@@ -1,12 +1,16 @@
+import sys
+sys.path.append('perf_analysis_tool')
+
 import psutil
 import threading
-import utils
-from collections import OrderedDict
 import time
-import global_variable
-import perf
+from collections import OrderedDict
 
-class CpuProfile:    
+import utils
+import global_variable
+from diag.perf import perf
+
+class CpuMonitor:    
     
     temp_directory = global_variable.temp_directory + 'cpu' 
     files = {
@@ -17,7 +21,7 @@ class CpuProfile:
         self.name = process['name']
         if process.has_key('trigger'):
             self.trigger = process['trigger']
-        self.file_addr = utils.get_file_addr(CpuProfile.files, self.name, CpuProfile.temp_directory, 'json')
+        self.file_addr = utils.get_file_addr(CpuMonitor.files, self.name, CpuMonitor.temp_directory, 'json')
         self.parsed_output = {}
                     
     def __get_thread(self, proc, thread) :
@@ -29,7 +33,7 @@ class CpuProfile:
         except:
             return
         try:
-            thread_entry['cpu_percent'] = CpuProfile.__get_cpu_percent(proc, thread)
+            thread_entry['cpu_percent'] = CpuMonitor.__get_cpu_percent(proc, thread)
         except:
             thread_entry['cpu_percent'] = 0.0    
         thread_entry['user_time'] = thread.user_time
@@ -80,14 +84,14 @@ class CpuProfile:
     def __collect_sample(self) :
         if self.name == 'all' :
             for proc in psutil.process_iter():
-                index = CpuProfile.__find_index(self.parsed_output, proc)
+                index = CpuMonitor.__find_index(self.parsed_output, proc)
                 if(index == -1):
                     self.parsed_output[self.name].append(self.__get_details(proc))
                     index = len(self.parsed_output['all']) - 1
                 self.parsed_output[self.name][index]['samples'].append(self.__get_sample(proc))
         else :
             try:
-                proc = CpuProfile.get_proc_object(self.name)
+                proc = CpuMonitor.get_proc_object(self.name)
                 self.parsed_output[self.name]['samples'].append(self.__get_sample(proc))
             except:
                 pass
@@ -99,11 +103,11 @@ class CpuProfile:
                 self.parsed_output[self.name].append(self.__get_details(proc))
         else :
             self.parsed_output[self.name] = {}
-            proc = CpuProfile.get_proc_object(self.name)
+            proc = CpuMonitor.get_proc_object(self.name)
             self.parsed_output[self.name] = self.__get_details(proc)
         
         self.call_repeatedly(self.__collect_sample)
-        CpuProfile.dump_output(self.parsed_output, self.file_addr)
+        CpuMonitor.dump_output(self.parsed_output, self.file_addr)
         
     def call_repeatedly(self, target_fun):
         thread_objects = []
@@ -137,6 +141,6 @@ class CpuProfile:
             
     @staticmethod
     def dump_output(parsed_output, file_addr):
-        utils.create_directory(CpuProfile.temp_directory)
+        utils.create_directory(CpuMonitor.temp_directory)
         utils.write_file(parsed_output, file_addr)
     

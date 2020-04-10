@@ -1,3 +1,6 @@
+import sys
+sys.path.append('perf_analysis_tool')
+
 import os
 import shutil
 import json
@@ -5,11 +8,10 @@ import commands
 from zipfile import ZipFile
 from threading import _Timer
 from prettytable import PrettyTable
-
 import random
-import global_variable
-from diag.perf.global_variable_perf import *
 
+import global_variable 
+from diag.perf import global_variable_perf
 
 class CustomTimer(_Timer):
     def __init__(self, interval, function, args=[], kwargs={}):
@@ -26,6 +28,8 @@ class CustomTimer(_Timer):
 def create_directory(directory) :
     try :
         os.mkdir(directory)
+        # print(directory + 'created')
+        # print(os.path.exists('temp_result/{0}'.format(directory)))
     except :
         if os.path.exists(directory):                            # File exists
             pass

@@ -1,8 +1,11 @@
+import sys
+sys.path.append('perf_analysis_tool')
+
 import time
 
 import utils
 import global_variable
-import perf
+from diag.perf import perf
 
 class Commands():  
     temp_directory = global_variable.temp_directory + 'commands'   

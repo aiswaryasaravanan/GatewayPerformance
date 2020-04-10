@@ -1,3 +1,6 @@
+import sys
+sys.path.append('perf_analysis_tool')
+
 import global_variable
 
 temp_directory = global_variable.temp_directory + 'perf'

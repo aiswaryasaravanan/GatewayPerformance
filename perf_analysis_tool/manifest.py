@@ -1,8 +1,11 @@
+import sys
+sys.path.append('perf_analysis_tool')
+
 import time
 import datetime
+from collections import OrderedDict
 
 import utils
-from collections import OrderedDict
 
 def get_hardware_info(manifest):
     manifest['deviceModel'] = utils.execute_command('cat /opt/vc/lib/python/hardwareinfo.py | grep DEVICE_MODEL').split(' = ')[1].split("'")[1]
