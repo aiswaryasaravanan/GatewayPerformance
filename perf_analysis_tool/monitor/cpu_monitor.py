@@ -31,7 +31,7 @@ class CpuMonitor:
             t = psutil.Process(thread.id)
             thread_entry['name'] = t.name()
         except:
-            return
+            return None
         try:
             thread_entry['cpu_percent'] = CpuMonitor.__get_cpu_percent(proc, thread)
         except:
@@ -65,9 +65,10 @@ class CpuMonitor:
             thread_objects.append(t)
             
         for t in thread_objects:
-            if not sample[time_stamp].has_key('threads'):
-                sample[time_stamp]['threads'] = []
-            sample[time_stamp]['threads'].append(t.join())
+            if t.join() != None:
+                if not sample[time_stamp].has_key('threads'):
+                    sample[time_stamp]['threads'] = []
+                sample[time_stamp]['threads'].append(t.join())
 
         return sample
 
@@ -90,11 +91,9 @@ class CpuMonitor:
                     index = len(self.parsed_output['all']) - 1
                 self.parsed_output[self.name][index]['samples'].append(self.__get_sample(proc))
         else :
-            try:
-                proc = CpuMonitor.get_proc_object(self.name)
+            proc = CpuMonitor.get_proc_object(self.name)
+            if proc != None:
                 self.parsed_output[self.name]['samples'].append(self.__get_sample(proc))
-            except:
-                pass
                             
     def get_cpu_profile(self):                    # making a room for process        
         if self.name == 'all' :
@@ -104,7 +103,8 @@ class CpuMonitor:
         else :
             self.parsed_output[self.name] = {}
             proc = CpuMonitor.get_proc_object(self.name)
-            self.parsed_output[self.name] = self.__get_details(proc)
+            if proc != None:
+                self.parsed_output[self.name] = self.__get_details(proc)
         
         self.__call_repeatedly(self.__collect_sample)
         CpuMonitor.dump_output(self.parsed_output, self.file_addr)
@@ -135,9 +135,12 @@ class CpuMonitor:
                 
     @staticmethod
     def get_proc_object(name):
-        for proc in psutil.process_iter():
-            if proc.name() == name:
-                return proc
+        try:
+            for proc in psutil.process_iter():
+                if proc.name() == name:
+                    return proc
+        except:
+            return None
             
     @staticmethod
     def dump_output(parsed_output, file_addr):

@@ -17,18 +17,10 @@ def do_perf_diag(critical_items):
 
     perf.collect_perf_report(critical_items)
     perf.collect_perf_stat(critical_items)
-    perf.collect_perf_latency()
-
-def get_top_10(data):
-    top_10 = OrderedDict()
-    count = 0
-    for key in data.keys():
-        if count < 10 :
-            top_10[key] = data[key]
-            count +=1
-        else :
-            break
-    return top_10
+    latency_analysis = perf.collect_perf_latency()
+    critical_items.update(latency_analysis)
+    
+    return critical_items
 
 def counter_based_critical_items():
     file_list = utils.list_files(CounterMonitor.temp_directory)
@@ -36,7 +28,7 @@ def counter_based_critical_items():
     critical_items = defaultdict()
     for file_ in file_list:
         counters = utils.load_data('{0}/{1}'.format(CounterMonitor.temp_directory, file_))
-        counters = CounterMonitor.poison_counters(counters)
+        # counters = CounterMonitor.poison_counters(counters)
 
         for TS in counters['counters']:
             for counter in TS[TS.items()[0][0]]:
@@ -49,11 +41,11 @@ def counter_based_critical_items():
     for key, value in sorted(critical_items.items(), key = lambda item : item[1][len(item[1]) - 1] - item[1][0], reverse =True):
         sorted_res[key] = value
 
-    return get_top_10(sorted_res)
+    return utils.get_top_10(sorted_res)
 
 def drop_based_critical_items():
     handoff = utils.load_data(utils.get_file_addr(Commands.files, "handoff")) 
-    handoff = Commands.poison_queue(handoff)
+    # handoff = Commands.poison_queue(handoff)
 
     critical_items = defaultdict(dict)
 
@@ -70,7 +62,7 @@ def drop_based_critical_items():
     for key, value in sorted(critical_items.items(), key = lambda item : item[1]['drops'][len(critical_items[item[0]]['drops']) - 1] - item[1]['drops'][0], reverse = True):
         sorted_res[key] = value
 
-    return get_top_10(sorted_res)
+    return utils.get_top_10(sorted_res)
 
 def cpu_based_critical_items():
     data = utils.load_data(utils.get_file_addr(CpuMonitor.files, "all"))
@@ -90,7 +82,7 @@ def cpu_based_critical_items():
     for key, value in sorted(critical_items.items(), key = lambda item : sum(item[1]['cpu_percent']) / len(item[1]['cpu_percent']), reverse = True):
         sorted_res[key] = value
 
-    return get_top_10(sorted_res)
+    return utils.get_top_10(sorted_res)
 
 def extract_critical_items(analysis_list, diag_list):
     critical_items = OrderedDict()
@@ -103,6 +95,6 @@ def extract_critical_items(analysis_list, diag_list):
             critical_items['counters'] = counter_based_critical_items()
             
     if diag_list.has_key('perf'):
-        do_perf_diag(critical_items)
+        critical_items = do_perf_diag(critical_items)
             
     return critical_items

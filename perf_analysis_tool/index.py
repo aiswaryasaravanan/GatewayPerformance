@@ -72,7 +72,7 @@ def init(input):
     for diag_key in input['diag']:
         if diag_key == 'perf':
             perf_list = input['diag']['perf']
-            perf.init(perf_list['record'], perf_list['sched'], perf_list['stat'])
+            perf.init(perf_list['record'], perf_list['sched'], perf_list['stat'], perf_list['latency'])
             
     utils.create_directory(global_variable.output_directory)
 
@@ -89,8 +89,8 @@ def main():
         # time_stamp = time.time()
         # utils.unzip_output(arg_dict.items()[0][1], input['output_directory'])
         # critical_items = critical_threads.extract_critical_items(input)
-        # perf.collect_perf_report(critical_items)
-        # perf.collect_perf_stat(critical_items)
+        # # perf.collect_perf_report(critical_items)
+        # # perf.collect_perf_stat(critical_items)
         # utils.create_summary(critical_items)
         # utils.print_table(critical_items)
         # utils.delete_temporary_files()            
