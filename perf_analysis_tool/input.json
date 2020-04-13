@@ -70,6 +70,10 @@
 				"number_of_sched" : 2,
 				"delay_between_sched" : 2
 			},
+			"latency" : [
+				"Switches",
+				"Average delay"
+			],
 			"stat" : {
 				"sleep" : 0.01,
 				"events" : [

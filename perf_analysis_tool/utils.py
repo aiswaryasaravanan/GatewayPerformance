@@ -9,6 +9,7 @@ from zipfile import ZipFile
 from threading import _Timer
 from prettytable import PrettyTable
 import random
+from collections import OrderedDict
 
 import global_variable 
 from diag.perf import global_variable_perf
@@ -52,7 +53,7 @@ def move_directory(source_directory, destination_directory):
     shutil.move(source_directory, destination_directory)
     
 def load_data(file_addr):
-    with open(file_addr) as r_obj:
+    with open(file_addr, 'r') as r_obj:
         data = json.load(r_obj)
     return data
 
@@ -128,44 +129,55 @@ def unzip_output(file_name):
     with ZipFile(file_name, "r") as zip:
         zip.extractall()
         
+def get_top_10(data):
+    top_10 = OrderedDict()
+    count = 0
+    for key in data.keys():
+        if count < 10 :
+            top_10[key] = data[key]
+            count +=1
+        else :
+            break
+    return top_10
+        
 def create_summary(critical_items):
     print('\n\tSummary Report\n')
     for key in critical_items:
-        count = 0 
-        # table = PrettyTable()
-        fields = []
-        print(key)
-        if key == 'cpu':
-            fields = ['Thread Name', key]
-            table = PrettyTable(fields)
-            for tid in critical_items[key]:
-                if count > 3:
-                    break
-                table.add_row([critical_items[key][tid]['name'], sum(critical_items[key][tid]['cpu_percent']) / len(critical_items[key][tid]['cpu_percent'])])
-                count += 1
-        elif key == 'drops':
-            fields = ['Handoff Queue Name', key]
-            table = PrettyTable(fields)
-            for tid in critical_items[key]:
-                if count > 3:
-                    break
-                increase_rate = critical_items[key][tid]['drops'][len(critical_items[key][tid]['drops']) - 1] - critical_items[key][tid]['drops'][0]
-                total_drops = critical_items[key][tid]['drops'][len(critical_items[key][tid]['drops']) - 1]
-                table.add_row([critical_items[key][tid]['name'], str(increase_rate) + '(' + str(total_drops) + ')'])
-                count += 1
-        elif key == 'counters':
-            fields = ['Counter Name', 'drops']
-            table = PrettyTable(fields)
-            for name in critical_items[key]:
-                if count > 3:
-                    break
-                increase_rate = critical_items[key][name][len(critical_items[key][name]) - 1] - critical_items[key][name][0]
-                total_drops = critical_items[key][name][len(critical_items[key][name]) - 1]
-                table.add_row([name, str(increase_rate) + '(' + str(total_drops) + ')'])
-                count += 1
-        align_table(table, fields, 'l')
-        print(table)
-        del table
+        if key == 'cpu' or key == 'drops' or key == 'counters' :
+            count = 0 
+            fields = []
+            print(key)
+            if key == 'cpu':
+                fields = ['Thread Name', key]
+                table = PrettyTable(fields)
+                for tid in critical_items[key]:
+                    if count > 3:
+                        break
+                    table.add_row([critical_items[key][tid]['name'], sum(critical_items[key][tid]['cpu_percent']) / len(critical_items[key][tid]['cpu_percent'])])
+                    count += 1
+            elif key == 'drops':
+                fields = ['Handoff Queue Name', key]
+                table = PrettyTable(fields)
+                for tid in critical_items[key]:
+                    if count > 3:
+                        break
+                    increase_rate = critical_items[key][tid]['drops'][len(critical_items[key][tid]['drops']) - 1] - critical_items[key][tid]['drops'][0]
+                    total_drops = critical_items[key][tid]['drops'][len(critical_items[key][tid]['drops']) - 1]
+                    table.add_row([critical_items[key][tid]['name'], str(increase_rate) + '(' + str(total_drops) + ')'])
+                    count += 1
+            elif key == 'counters':
+                fields = ['Counter Name', 'drops']
+                table = PrettyTable(fields)
+                for name in critical_items[key]:
+                    if count > 3:
+                        break
+                    increase_rate = critical_items[key][name][len(critical_items[key][name]) - 1] - critical_items[key][name][0]
+                    total_drops = critical_items[key][name][len(critical_items[key][name]) - 1]
+                    table.add_row([name, str(increase_rate) + '(' + str(total_drops) + ')'])
+                    count += 1
+            align_table(table, fields, 'l')
+            print(table)
+            del table
         
 def align_table(table_object, fields, alignment):
     for field in fields :
@@ -184,11 +196,13 @@ def print_table(critical_items):
             fields = ['Handoff Queue Name', key, "perf Report", "Perf Stat"]
         elif key == 'counters':
             fields = ['Counter Name', 'drops']
+        else:
+            fields = ['Latency Report : {0}'.format(key)]
 
         table = PrettyTable(fields)
         align_table(table, fields, 'l')
 
-        if key != 'counters':
+        if key == 'cpu' or key == 'drops':
             for tid in critical_items[key]:
                 
                 report = []
@@ -209,11 +223,22 @@ def print_table(critical_items):
                     increase_rate = critical_items[key][tid]['drops'][len(critical_items[key][tid]['drops']) - 1] - critical_items[key][tid]['drops'][0]
                     total_drops = critical_items[key][tid]['drops'][len(critical_items[key][tid]['drops']) - 1]
                     table.add_row([critical_items[key][tid]['name'], str(increase_rate) + '(' + str(total_drops) + ')', report, stat])
-        if key == 'counters':
+        elif key == 'counters':
             for name in critical_items[key]:
                 increase_rate = critical_items[key][name][len(critical_items[key][name]) - 1] - critical_items[key][name][0]
                 total_drops = critical_items[key][name][len(critical_items[key][name]) - 1]
                 table.add_row([name, str(increase_rate) + '(' + str(total_drops) + ')'])
+                
+        else : 
+            print('Perf latency report:' + str(key))
+            for index in range(len(critical_items[key])):
+                latency_report = critical_items[key][index]
+                sub_fields = ['Thread Id', 'Switches', 'Runtime', 'Average delay', 'Maximum delay']
+                sub_table = PrettyTable(sub_fields)
+                align_table(sub_table, sub_fields, 'l')
+                for tid in latency_report:
+                    sub_table.add_row([tid, latency_report[tid]['Switches'], latency_report[tid]['Runtime'], latency_report[tid]['Average delay'], latency_report[tid]['Maximum delay']])
+                table.add_row([sub_table])
 
         print(table)
         del table

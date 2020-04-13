@@ -25,7 +25,7 @@ class CounterMonitor:
         else:
             self.trigger = None
         self.parsed_output = {}
-        self.file_addr = utils.get_file_addr(CounterMonitor.files, 'counters', CounterMonitor.temp_directory, 'json')
+        self.file_addr = utils.get_file_addr(CounterMonitor.files, 'counters')
     
     def __get_dpdk_interface_names(self):
         dpdk_ports_dump = utils.execute_command(utils.get_command_list(CounterMonitor.command_list, 'dpdk_interface'))
@@ -107,24 +107,20 @@ class CounterMonitor:
     @staticmethod
     def dump_output(parsed_output, file_addr):
         if utils.is_file_exists(file_addr):
-            print('inside if')
             file_output = utils.load_data(file_addr)
             for TS_parsed_output in parsed_output['counters']:
                 flag = 0
                 for TS_file_output in file_output['counters']:
                     if TS_parsed_output.items()[0][0] == TS_file_output.items()[0][0]:
-                        print('hits')
                         for cntr in TS_parsed_output[TS_parsed_output.items()[0][0]]:
                             TS_file_output[TS_file_output.items()[0][0]][cntr] = TS_parsed_output[TS_parsed_output.items()[0][0]][cntr]
                         flag = 1
                         break
                 if flag == 0:
-                    print('no hit')
                     file_output['counters'].append(TS_parsed_output)
                     
             parsed_output = file_output
         else:
-            print("inside else")
             utils.create_directory(CounterMonitor.temp_directory)
         utils.write_file(parsed_output, file_addr)
 

@@ -19,6 +19,14 @@ command_list = {
     "latency" : "perf sched latency"
 }
 
+latency_field_index = {
+    "Tid" : 0,
+    "Runtime" : 2,
+    "Switches" : 5,
+    "Average delay" : 8,
+    "Maximum delay" : 12
+}
+
 sleep_record = 0
 frequency = 0
 number_of_record = 0
