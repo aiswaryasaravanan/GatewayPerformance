@@ -5,7 +5,8 @@ import time
 
 import utils
 import global_variable
-from diag.perf import perf
+from diag.perf.perf_diag import PerfDiag
+from diag.perf.perf_globals import PerfGlobals
 
 class Commands():  
     temp_directory = global_variable.temp_directory + 'commands'   
@@ -42,8 +43,12 @@ class Commands():
                         try:
                             if queue['drops'] >= self.trigger:
                                 print('triggered -> commands')
-                                perf.do_perf_record()
-                                perf.do_perf_sched()
+                            for count in range(PerfGlobals.number_of_record):
+                                output_file = 'perf_record_{0}.data'.format(count+1)
+                                PerfDiag.do_perf_record(output_file)
+                            for count in range(PerfGlobals.number_of_sched):
+                                output_file = 'perf_sched_{0}.data'.format(count+1)
+                                PerfDiag.do_perf_sched(output_file)
                                 global_variable.is_triggered = 1
                                 break
                         except:

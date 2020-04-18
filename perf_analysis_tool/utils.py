@@ -12,7 +12,7 @@ import random
 from collections import OrderedDict
 
 import global_variable 
-from diag.perf import global_variable_perf
+from diag.perf.perf_globals import PerfGlobals
 
 class CustomTimer(_Timer):
     def __init__(self, interval, function, args=[], kwargs={}):
@@ -51,6 +51,9 @@ def move_directory(source_directory, destination_directory):
     if not os.path.exists(destination_directory) :
         create_directory(destination_directory)    
     shutil.move(source_directory, destination_directory)
+    
+def rename_file(source, destination):
+    os.rename(source, destination)
     
 def load_data(file_addr):
     with open(file_addr, 'r') as r_obj:
@@ -91,6 +94,7 @@ def get_no_of_sample(sample_frequency, duration):
 def delete_temporary_files():
     clear_directory('temp_result')
     global_variable.is_triggered = False          # reset
+    global_variable.trigger_lock = None
     
 def is_file_exists(file_name):
     if os.path.exists(file_name):
@@ -197,7 +201,7 @@ def print_table(critical_items):
         elif key == 'counters':
             fields = ['Counter Name', 'drops']
         else:
-            fields = ['Latency Report : {0}'.format(key)]
+            fields = [key]
 
         table = PrettyTable(fields)
         align_table(table, fields, 'l')
@@ -206,15 +210,15 @@ def print_table(critical_items):
             for tid in critical_items[key]:
                 
                 report = []
-                for cnt in range(global_variable_perf.number_of_record):
+                for cnt in range(PerfGlobals.number_of_record):
                     report.append('Report_{0}\n'.format(cnt + 1))
                     rep = ''
-                    content = read_file(generate_file_name(str(tid), '{0}/{1}'.format(get_file_addr(global_variable_perf.files, 'report') + str(cnt + 1), key), 'txt'), 8, -4)
+                    content = read_file(generate_file_name(str(tid), '{0}/report{1}/{2}'.format(get_file_addr(PerfGlobals.directories, 'report'), str(cnt + 1), key), 'txt'), 8, -4)
                     report.append(rep.join(content))
                 report = ''.join(report)
                                 
                 stat = ''
-                content = read_file(generate_file_name(str(tid), '{0}/{1}'.format(get_file_addr(global_variable_perf.files, 'stat'), key), 'txt'), 3, -2)
+                content = read_file(generate_file_name(str(tid), '{0}/{1}'.format(get_file_addr(PerfGlobals.directories, 'stat'), key), 'txt'), 3, -2)
                 stat = stat.join(content)
 
                 if key == "cpu":
@@ -230,14 +234,17 @@ def print_table(critical_items):
                 table.add_row([name, str(increase_rate) + '(' + str(total_drops) + ')'])
                 
         else : 
-            print('Perf latency report:' + str(key))
+            print('Perf latency report:')
             for index in range(len(critical_items[key])):
                 latency_report = critical_items[key][index]
-                sub_fields = ['Thread Id', 'Switches', 'Runtime', 'Average delay', 'Maximum delay']
-                sub_table = PrettyTable(sub_fields)
-                align_table(sub_table, sub_fields, 'l')
+                sub_table = PrettyTable()
+                sub_table.add_column('Thread id', ['Switches', 'Runtime', 'Average delay', 'Maximum delay'])
+                fields = ['Thread id']
                 for tid in latency_report:
-                    sub_table.add_row([tid, latency_report[tid]['Switches'], latency_report[tid]['Runtime'], latency_report[tid]['Average delay'], latency_report[tid]['Maximum delay']])
+                    sub_table.add_column(tid, [latency_report[tid]['Switches'], latency_report[tid]['Runtime'], latency_report[tid]['Average delay'], latency_report[tid]['Maximum delay']])
+                    fields.append(tid)
+                
+                align_table(sub_table, ['Thread id', 'Switches', 'Runtime', 'Average delay', 'Maximum delay'], 'l')
                 table.add_row([sub_table])
 
         print(table)

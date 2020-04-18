@@ -8,7 +8,8 @@ from collections import OrderedDict
 
 import utils
 import global_variable
-from diag.perf import perf
+from diag.perf.perf_diag import PerfDiag
+from diag.perf.perf_globals import PerfGlobals
 
 class CpuMonitor:    
     
@@ -44,8 +45,12 @@ class CpuMonitor:
                 try:
                     if thread_entry['cpu_percent'] >= self.trigger:
                         print("triggered -> cpu")
-                        perf.do_perf_record()
-                        perf.do_perf_sched()
+                        for count in range(PerfGlobals.number_of_record):
+                            output_file = 'perf_record_{0}.data'.format(count+1)
+                            PerfDiag.do_perf_record(output_file)
+                        for count in range(PerfGlobals.number_of_sched):
+                            output_file = 'perf_sched_{0}.data'.format(count+1)
+                            PerfDiag.do_perf_sched(output_file)
                         global_variable.is_triggered = 1
                 except:
                     pass        # instance variable trigger not found
@@ -93,7 +98,8 @@ class CpuMonitor:
         else :
             proc = CpuMonitor.get_proc_object(self.name)
             if proc != None:
-                self.parsed_output[self.name]['samples'].append(self.__get_sample(proc))
+                if self.parsed_output[self.name].has_key('samples'):
+                    self.parsed_output[self.name]['samples'].append(self.__get_sample(proc))
                             
     def get_cpu_profile(self):                    # making a room for process        
         if self.name == 'all' :

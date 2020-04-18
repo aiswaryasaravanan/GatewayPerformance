@@ -12,7 +12,8 @@ from monitor.counter_monitor import CounterMonitor
 from monitor.command_monitor import Commands 
 from monitor.cpu_monitor import CpuMonitor 
 from analysis import root_cause_analysis
-from diag.perf import perf
+from diag.perf.perf_globals import PerfGlobals
+from diag.perf.perf_diag import PerfDiag
 import utils as utils
 import manifest 
 import global_variable 
@@ -72,15 +73,15 @@ def init(input):
     for diag_key in input['diag']:
         if diag_key == 'perf':
             perf_list = input['diag']['perf']
-            perf.init(perf_list['record'], perf_list['sched'], perf_list['stat'], perf_list['latency'])
+            perf_global_singleton_obj = PerfGlobals(perf_list['record'], perf_list['sched'], perf_list['stat'], perf_list['latency'])
             
     utils.create_directory(global_variable.output_directory)
 
                     
 def main():
 
-    input = utils.load_data("input.json")    
-    
+    input = utils.load_data("input2.json")    
+
     init(input)
         
     arg_dict = parse_command_line_arguments()

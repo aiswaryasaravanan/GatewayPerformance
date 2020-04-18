@@ -4,7 +4,8 @@ sys.path.append('perf_analysis_tool')
 import time
 
 import global_variable
-from diag.perf import perf
+from diag.perf.perf_diag import PerfDiag
+from diag.perf.perf_globals import PerfGlobals
 import utils
 
 class CounterMonitor:
@@ -60,8 +61,12 @@ class CounterMonitor:
                     for counter in current_timestamp_entry[TS]:
                         if current_timestamp_entry[TS][counter] >= self.trigger:
                             print('triggered - > counter')
-                            perf.do_perf_record()
-                            perf.do_perf_sched()
+                            for count in range(PerfGlobals.number_of_record):
+                                output_file = 'perf_record_{0}.data'.format(count+1)
+                                PerfDiag.do_perf_record(output_file)
+                            for count in range(PerfGlobals.number_of_sched):
+                                output_file = 'perf_sched_{0}.data'.format(count+1)
+                                PerfDiag.do_perf_sched(output_file)
                             global_variable.is_triggered = 1
                             break
     
