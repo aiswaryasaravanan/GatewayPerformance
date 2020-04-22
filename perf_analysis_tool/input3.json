@@ -3,9 +3,9 @@
 	"sample_frequency" : 5,
     "output_directory" : "/root/perf-analysis/result",
     "auto_mode" : {
-        "find_trigger" : 1,
+        "trigger_calculation_mode" : 1,
         "consecutive_threshold_exceed_limit" : 3,
-        "window_size" : 2
+        "window_size" : 5
     },
 	"monitor" : {
 		"cpu" : [

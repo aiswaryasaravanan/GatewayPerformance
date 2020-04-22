@@ -10,6 +10,10 @@ import utils
 
 class CounterMonitor:
     temp_directory = global_variable.temp_directory + 'counters' 
+    
+    if global_variable.trigger_calculation_mode:
+        counter_trigger = {}
+        
     files = {
         # "dpdk_counters" : "{0}/dpdk_counters.json".format(temp_directory)
         "counters" : '{0}/counters.json'.format(temp_directory)
@@ -52,23 +56,22 @@ class CounterMonitor:
         # self.auto_trigger_check(current_output)    
         return current_output
     
-    def auto_trigger_check(self, counters):
-        with global_variable.trigger_lock:
-            if global_variable.auto_mode and global_variable.is_triggered == 0:
-                if self.trigger:
-                    current_timestamp_entry = counters['counters'][len(counters['counters']) - 1]
-                    TS = current_timestamp_entry.items()[0][0]
-                    for counter in current_timestamp_entry[TS]:
-                        if current_timestamp_entry[TS][counter] >= self.trigger:
-                            print('triggered - > counter')
-                            for count in range(PerfGlobals.number_of_record):
-                                output_file = 'perf_record_{0}.data'.format(count+1)
-                                PerfDiag.do_perf_record(output_file)
-                            for count in range(PerfGlobals.number_of_sched):
-                                output_file = 'perf_sched_{0}.data'.format(count+1)
-                                PerfDiag.do_perf_sched(output_file)
-                            global_variable.is_triggered = 1
-                            break
+    def __auto_trigger_check(self, counter_drop, trigger_value):
+        with global_variable.trigger_lock: 
+            if global_variable.is_triggered == 0:
+                # current_timestamp_entry = counters['counters'][len(counters['counters']) - 1]
+                # TS = current_timestamp_entry.items()[0][0]
+                # for counter in current_timestamp_entry[TS]:
+                #     if current_timestamp_entry[TS][counter] >= trigger_value:
+                if counter_drop >= trigger_value:
+                    print('triggered - > counter')
+                    for count in range(PerfGlobals.number_of_record):
+                        output_file = 'perf_record_{0}.data'.format(count+1)
+                        PerfDiag.do_perf_record(output_file)
+                    for count in range(PerfGlobals.number_of_sched):
+                        output_file = 'perf_sched_{0}.data'.format(count+1)
+                        PerfDiag.do_perf_sched(output_file)
+                    global_variable.is_triggered = 1
     
     def get_counters(self) :
         self.parsed_output['counters'] = []
@@ -87,7 +90,33 @@ class CounterMonitor:
             self.parsed_output['counters'].append(current_sample)
             
             self.parsed_output = CounterMonitor.poison_counters(self.parsed_output)
-            self.auto_trigger_check(self.parsed_output)
+            # take current sample
+            current_sample = self.parsed_output['counters'][len(self.parsed_output['counters']) - 1][time_stamp]
+            
+            if global_variable.auto_mode and global_variable.trigger_calculation_mode:
+                for cntr in current_sample:
+                    CounterMonitor.counter_trigger = utils.update_trigger_blob(CounterMonitor.counter_trigger, cntr, current_sample[cntr])
+                    
+            if global_variable.auto_mode and not global_variable.trigger_calculation_mode:
+                if hasattr(CounterMonitor, 'counter_trigger'):
+                    for cntr in current_sample:
+                        trigger_value = CounterMonitor.counter_trigger[cntr]
+                        self.__auto_trigger_check(current_sample[cntr], trigger_value)
+                elif self.trigger:
+                    trigger_value = self.trigger
+                    for cntr in current_sample:
+                        self.__auto_trigger_check(current_sample[cntr], trigger_value)
+                
+                # if global_variable.trigger_mode and global_variable.is_trigger_calculated:
+                #     for cntr in current_sample[time_stamp]:
+                #         trigger_value = CounterMonitor.counter_trigger[cntr]
+                #         self.__auto_trigger_check(current_sample[time_stamp][cntr], trigger_value)
+                        
+                # elif self.trigger and not global_variable.trigger_mode:
+                #     trigger_value = self.trigger
+                #     for cntr in current_sample[time_stamp]:
+                #         self.__auto_trigger_check(current_sample[time_stamp][cntr], trigger_value)
+                    
             
             time.sleep(global_variable.sample_frequency)
             

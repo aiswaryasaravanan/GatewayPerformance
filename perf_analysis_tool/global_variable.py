@@ -7,5 +7,6 @@ window_size = 0
 consecutive_threshold_exceed_limit = 0
 is_triggered = 0
 trigger_lock = None
+trigger_calculation_mode = False
 
 temp_directory = 'temp_result/'    

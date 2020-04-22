@@ -17,11 +17,17 @@ class CpuMonitor:
     files = {
         "all" : "{0}/all.json".format(temp_directory)
     }
+    
+    print(global_variable.trigger_calculation_mode)
+    if global_variable.trigger_calculation_mode:
+        cpu_trigger = {}
         
     def __init__(self, process):
         self.name = process['name']
         if process.has_key('trigger'):
             self.trigger = process['trigger']
+        else:
+            self.trigger = None
         self.file_addr = utils.get_file_addr(CpuMonitor.files, self.name, CpuMonitor.temp_directory, 'json')
         self.parsed_output = {}
                     
@@ -40,20 +46,43 @@ class CpuMonitor:
         thread_entry['user_time'] = thread.user_time
         thread_entry['system_time'] = thread.system_time   
         
-        with global_variable.trigger_lock: 
-            if global_variable.auto_mode and global_variable.is_triggered == 0:
-                try:
-                    if thread_entry['cpu_percent'] >= self.trigger:
-                        print("triggered -> cpu")
-                        for count in range(PerfGlobals.number_of_record):
-                            output_file = 'perf_record_{0}.data'.format(count+1)
-                            PerfDiag.do_perf_record(output_file)
-                        for count in range(PerfGlobals.number_of_sched):
-                            output_file = 'perf_sched_{0}.data'.format(count+1)
-                            PerfDiag.do_perf_sched(output_file)
-                        global_variable.is_triggered = 1
-                except:
-                    pass        # instance variable trigger not found
+        if global_variable.auto_mode and global_variable.trigger_calculation_mode:
+            CpuMonitor.cpu_trigger = utils.update_trigger_blob(CpuMonitor.cpu_trigger, thread_entry['tid'], thread_entry['cpu_percent'])
+    
+        if global_variable.auto_mode and not global_variable.trigger_calculation_mode:
+            flag = 1
+            if hasattr(CpuMonitor, 'cpu_trigger'): 
+                if CpuMonitor.cpu_trigger.has_key(thread_entry['tid']):
+                    trigger_value = CpuMonitor.cpu_trigger[thread_entry['tid']]
+                else:
+                    flag = 0
+            elif self.trigger:
+                trigger_value = self.trigger
+            else:
+                flag = 0
+                                
+            # if global_variable.trigger_mode and global_variable.is_trigger_calculated:
+            #     trigger_value = CpuMonitor.cpu_trigger[thread_entry['tid']]
+            # elif self.trigger and not global_variable.trigger_mode:
+            #     trigger_value = self.trigger
+            # else :
+            #     flag = 0
+                
+            if flag:
+                with global_variable.trigger_lock: 
+                    if global_variable.is_triggered == 0:
+                        try:
+                            if thread_entry['cpu_percent'] >= self.trigger:
+                                print("triggered -> cpu")
+                                for count in range(PerfGlobals.number_of_record):
+                                    output_file = 'perf_record_{0}.data'.format(count+1)
+                                    PerfDiag.do_perf_record(output_file)
+                                for count in range(PerfGlobals.number_of_sched):
+                                    output_file = 'perf_sched_{0}.data'.format(count+1)
+                                    PerfDiag.do_perf_sched(output_file)
+                                global_variable.is_triggered = 1
+                        except:
+                            pass        # instance variable trigger not found
                 
         return thread_entry
     
@@ -101,7 +130,7 @@ class CpuMonitor:
                 if self.parsed_output[self.name].has_key('samples'):
                     self.parsed_output[self.name]['samples'].append(self.__get_sample(proc))
                             
-    def get_cpu_profile(self):                    # making a room for process        
+    def get_cpu_profile(self):                    # making a room for process  
         if self.name == 'all' :
             self.parsed_output[self.name] = []
             for proc in psutil.process_iter():

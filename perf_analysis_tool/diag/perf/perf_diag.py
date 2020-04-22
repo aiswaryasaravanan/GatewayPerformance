@@ -56,7 +56,6 @@ class PerfDiag:
         utils.create_directory(utils.get_file_addr(PerfGlobals.directories, 'latency'))
         command = utils.get_command_list(PerfGlobals.command_list, 'latency')
         sts = utils.execute_command('{0} -i {1} > {2}'.format(command, input_file, output_file))
-        print('{0} -i {1} > {2}'.format(command, input_file, output_file))
         print(sts)
         
     @staticmethod

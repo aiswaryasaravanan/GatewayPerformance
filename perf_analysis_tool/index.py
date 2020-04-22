@@ -8,9 +8,6 @@ import subprocess
 import time
 import os
 
-from monitor.counter_monitor import CounterMonitor 
-from monitor.command_monitor import Commands 
-from monitor.cpu_monitor import CpuMonitor 
 from analysis import root_cause_analysis
 from diag.perf.perf_globals import PerfGlobals
 from diag.perf.perf_diag import PerfDiag
@@ -29,18 +26,21 @@ def get_diag_dump(monitor):
     thread_list = []
     for key in monitor.keys():
         if key == "cpu":
+            from monitor.cpu_monitor import CpuMonitor 
             for process in monitor['cpu']:
                 cpu = CpuMonitor(process)
                 t1 = threading.Thread(target = cpu.get_cpu_profile)
                 t1.start()
                 thread_list.append(t1)
         elif key == "commands" :
+            from monitor.command_monitor import Commands 
             for command in monitor[key]:
                 cmd = Commands(command)
                 t2 = threading.Thread(target = cmd.get_command_output)
                 t2.start()
                 thread_list.append(t2)
         elif key == "counters" :
+            from monitor.counter_monitor import CounterMonitor 
             for counter in monitor[key]:
                 cntr = CounterMonitor(counter)
                 t3 = threading.Thread(target = cntr.get_counters)                
@@ -57,6 +57,10 @@ def init_global_variable(input):
     global_variable.output_directory = input['output_directory']
     global_variable.auto_mode = input.has_key('auto_mode')
     if global_variable.auto_mode:
+        if input['auto_mode'].has_key('trigger_calculation_mode'):
+            global_variable.trigger_calculation_mode = True
+            # global_variable.is_trigger_calculated = False
+        
         global_variable.window_size = input['auto_mode']['window_size']
         global_variable.consecutive_threshold_exceed_limit = input['auto_mode']['consecutive_threshold_exceed_limit']
         global_variable.is_triggered = 0
@@ -80,7 +84,7 @@ def init(input):
                     
 def main():
 
-    input = utils.load_data("input2.json")    
+    input = utils.load_data("input3.json")    
 
     init(input)
         
@@ -105,6 +109,25 @@ def main():
             time_stamp = time.time()
 
             get_diag_dump(input['monitor'])
+            
+            while global_variable.auto_mode and global_variable.trigger_calculation_mode:
+                for i in range(4):
+                    print("inside trigger calculation mode... calculated diag dump")
+                    manifest.create_manifest()
+                    utils.zip_output(time_stamp)
+                    utils.delete_temporary_files()
+                    
+                    get_diag_dump(input['monitor'])
+                global_variable.trigger_calculation_mode = False
+                
+            while global_variable.auto_mode and global_variable.is_triggered == 0:
+                print("inside auto mode waiting for istrigered to set... calculated diag dump")
+                manifest.create_manifest()
+                utils.zip_output(time_stamp)
+                utils.delete_temporary_files()
+                
+                get_diag_dump(input['monitor'])
+                
             manifest.create_manifest()
 
             critical_items = root_cause_analysis.extract_critical_items(input['analysis'], input['diag'])
@@ -121,7 +144,10 @@ def main():
             consecutive_threshold_exceed_limit += 1
             if consecutive_threshold_exceed_limit == global_variable.consecutive_threshold_exceed_limit :
                 break
-        
 
 if __name__ == "__main__" :
     main()
+    
+
+
+

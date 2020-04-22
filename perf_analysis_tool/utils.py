@@ -111,7 +111,7 @@ def modify_drop(drop) :
 
 def check_and_delete():
     available_zip = execute_command("find {0} -maxdepth 1 -name '*.zip'".format(global_variable.output_directory))
-    available_zip = (available_zip.split('\n'))
+    available_zip = available_zip.split('\n')
     available_zip.sort()
     if len(available_zip) >= global_variable.window_size:
         sts = execute_command('rm {0}'.format(available_zip[0]))
@@ -249,5 +249,12 @@ def print_table(critical_items):
 
         print(table)
         del table
+        
+def update_trigger_blob(trigger_blob, key, value):
+    if not trigger_blob.has_key(key):
+        trigger_blob[key] = value
+    else:
+        trigger_blob[key] = max(int(trigger_blob[key]), int(value))
+    return trigger_blob
 
 
