@@ -11,7 +11,6 @@ import utils
 class CounterMonitor:
     temp_directory = global_variable.temp_directory + 'counters' 
     files = {
-        # "dpdk_counters" : "{0}/dpdk_counters.json".format(temp_directory)
         "counters" : '{0}/counters.json'.format(temp_directory)
     }
     command_list = {
