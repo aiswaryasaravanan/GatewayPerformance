@@ -2,7 +2,7 @@
 	"duration" : 15,
 	"sample_frequency" : 5,
     "output_directory" : "/root/perf-analysis/result",
-
+	"threshold-detection-mode" : 1,
 	"monitor" : {
 		"cpu" : [
 			{

@@ -21,6 +21,7 @@ import global_variable
 def parse_command_line_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("-F", "--filename", help="output zip file", type = file)
+    parser.add_argument("-T", "--threshold_detection", help="duration for threshold detection mode", type = int)
     args = parser.parse_args()
     return vars(args)
 
@@ -80,22 +81,28 @@ def init(input):
                     
 def main():
 
-    input = utils.load_data("input2.json")    
+    input = utils.load_data("input3.json")    
 
     init(input)
         
     arg_dict = parse_command_line_arguments()
-
-    if arg_dict.items()[0][1] != None:            # cmdline arg is there
-        # time_stamp = time.time()
-        # utils.unzip_output(arg_dict.items()[0][1], input['output_directory'])
-        # critical_items = critical_threads.extract_critical_items(input)
-        # # perf.collect_perf_report(critical_items)
-        # # perf.collect_perf_stat(critical_items)
-        # utils.create_summary(critical_items)
-        # utils.print_table(critical_items)
-        # utils.delete_temporary_files()            
-        pass
+    
+    if any(value != None for value in arg_dict.values()):       # cmdline arg is there
+        if arg_dict['filename']:                                # -F option given
+            print("perform zip op")
+            # time_stamp = time.time()
+            # utils.unzip_output(arg_dict.items()[0][1], input['output_directory'])
+            # critical_items = critical_threads.extract_critical_items(input)
+            # # perf.collect_perf_report(critical_items)
+            # # perf.collect_perf_stat(critical_items)
+            # utils.create_summary(critical_items)
+            # utils.print_table(critical_items)
+            # utils.delete_temporary_files()    
+        elif arg_dict['threshold_detection']:
+            global_variable.threshold_detection_mode = True
+            global_variable.no_of_sample = arg_dict['threshold_detection']   
+            get_diag_dump(input['monitor']) 
+            utils.delete_temporary_files()        
 
     else:
         consecutive_threshold_exceed_limit = 0
@@ -103,17 +110,27 @@ def main():
 
             utils.create_directory(global_variable.temp_directory)
             time_stamp = time.time()
+            
+            if input.has_key('monitor'):
+                get_diag_dump(input['monitor'])
+                while global_variable.auto_mode and global_variable.is_triggered == 0:
+                    print("inside auto mode waiting for istrigered to set... calculated diag dump")
+                    manifest.create_manifest()
+                    utils.zip_output(time_stamp)
+                    utils.delete_temporary_files()
+                    get_diag_dump(input['monitor'])
+                    
+                print("diagDump collected")
+                    
+                manifest.create_manifest()
+                if input['analysis'] and input['diag']:
+                    diag_list = [tool for tool in input['diag']]
+                    critical_items = root_cause_analysis.extract_critical_items(input['analysis'], diag_list)
+                    utils.create_summary(critical_items)
+                    utils.print_table(critical_items)
 
-            get_diag_dump(input['monitor'])
-            manifest.create_manifest()
-
-            critical_items = root_cause_analysis.extract_critical_items(input['analysis'], input['diag'])
-
-            utils.create_summary(critical_items)
-            utils.print_table(critical_items)
-
-            utils.zip_output(time_stamp)
-            utils.delete_temporary_files()
+                utils.zip_output(time_stamp)
+                utils.delete_temporary_files()
 
             if not global_variable.auto_mode :
                 break

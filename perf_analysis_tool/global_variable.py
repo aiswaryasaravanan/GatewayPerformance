@@ -8,4 +8,5 @@ consecutive_threshold_exceed_limit = 0
 is_triggered = 0
 trigger_lock = None
 
+threshold_detection_mode = False
 temp_directory = 'temp_result/'    
