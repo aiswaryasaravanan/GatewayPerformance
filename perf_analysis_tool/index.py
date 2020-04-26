@@ -81,7 +81,7 @@ def init(input):
                     
 def main():
 
-    input = utils.load_data("input3.json")    
+    input = utils.load_data("input2.json")    
 
     init(input)
         

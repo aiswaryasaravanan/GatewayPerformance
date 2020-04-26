@@ -4,8 +4,7 @@ sys.path.append('perf_analysis_tool')
 import time
 
 import global_variable
-from diag.perf.perf_diag import PerfDiag
-from diag.perf.perf_globals import PerfGlobals
+from monitor import monitor_utils
 import utils
 
 class CounterMonitor:
@@ -50,24 +49,18 @@ class CounterMonitor:
         current_output[self.name] = utils.execute_command("{0} {1}".format(utils.get_command_list(CounterMonitor.command_list, 'counters'), self.name))   
         # self.auto_trigger_check(current_output)    
         return current_output
-    
-    def auto_trigger_check(self, counters):
-        with global_variable.trigger_lock:
-            if global_variable.auto_mode and global_variable.is_triggered == 0:
-                if self.trigger:
-                    current_timestamp_entry = counters['counters'][len(counters['counters']) - 1]
-                    TS = current_timestamp_entry.items()[0][0]
-                    for counter in current_timestamp_entry[TS]:
-                        if current_timestamp_entry[TS][counter] >= self.trigger:
-                            print('triggered - > counter')
-                            for count in range(PerfGlobals.number_of_record):
-                                output_file = 'perf_record_{0}.data'.format(count+1)
-                                PerfDiag.do_perf_record(output_file)
-                            for count in range(PerfGlobals.number_of_sched):
-                                output_file = 'perf_sched_{0}.data'.format(count+1)
-                                PerfDiag.do_perf_sched(output_file)
-                            global_variable.is_triggered = 1
-                            break
+        
+    def __trigger_check(self, counter):
+        if self.trigger:                                # check the existence of trigger value
+            with global_variable.trigger_lock:          # wait for lock acquisition
+                for cntr in counter:
+                    if global_variable.is_triggered == 0:
+                        if monitor_utils.is_trigger_hits(counter[cntr], self.trigger):
+                            print('triggered -> counters')
+                            monitor_utils.do_start_perf()
+                        else: 
+                            continue
+                    break
     
     def get_counters(self) :
         self.parsed_output['counters'] = []
@@ -82,11 +75,17 @@ class CounterMonitor:
             c = utils.CustomTimer(0, target_fun)
             c.start()
             current_sample = {}
-            current_sample[time_stamp] = c.join()
+            current_sample[time_stamp] = {}
+            current_sample[time_stamp]['bandwidth'] = monitor_utils.get_bandwidth()
+            current_sample[time_stamp]['counter'] = c.join()
             self.parsed_output['counters'].append(current_sample)
             
             self.parsed_output = CounterMonitor.poison_counters(self.parsed_output)
-            self.auto_trigger_check(self.parsed_output)
+            # take out current entry
+            current_sample = self.parsed_output['counters'][len(self.parsed_output['counters']) - 1]
+            
+            if global_variable.auto_mode and global_variable.is_triggered == 0:
+                self.__trigger_check(current_sample[time_stamp]['counter'])
             
             time.sleep(global_variable.sample_frequency)
             
@@ -103,8 +102,8 @@ class CounterMonitor:
             pre_TS = previous_timestamp_entry.items()[0][0]
             current_timestamp_entry = counters['counters'][current_index]
             cur_TS = current_timestamp_entry.items()[0][0]
-            for counter in current_timestamp_entry[cur_TS]:
-                current_timestamp_entry[cur_TS][counter] = utils.modify_drop(previous_timestamp_entry[pre_TS][counter])
+            for counter in current_timestamp_entry[cur_TS]['counter']:
+                current_timestamp_entry[cur_TS]['counter'][counter] = utils.modify_drop(previous_timestamp_entry[pre_TS]['counter'][counter])
      
         return counters
             

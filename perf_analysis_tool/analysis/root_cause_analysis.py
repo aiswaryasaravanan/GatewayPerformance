@@ -102,8 +102,8 @@ def counter_based_critical_items():
         # counters = CounterMonitor.poison_counters(counters)
 
         for TS in counters['counters']:
-            for counter in TS[TS.items()[0][0]]:
-                drop = TS[TS.items()[0][0]][counter]
+            for counter in TS[TS.items()[0][0]]['counter']:
+                drop = TS[TS.items()[0][0]]['counter'][counter]
                 if not critical_items.has_key(counter):
                     critical_items[counter] = []
                 critical_items[counter].append(int(drop))
@@ -165,7 +165,8 @@ def extract_critical_items(analysis_list, diag_list):
         elif category == 'counters':
             critical_items['counters'] = counter_based_critical_items()
             
-    if diag_list.has_key('perf'):
+    tool = 'perf'
+    if tool in diag_list:
         critical_items = do_perf_diag(critical_items)
             
     return critical_items

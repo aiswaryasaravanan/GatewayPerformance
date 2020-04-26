@@ -5,8 +5,7 @@ import time
 
 import utils
 import global_variable
-from diag.perf.perf_diag import PerfDiag
-from diag.perf.perf_globals import PerfGlobals
+from monitor import monitor_utils
 
 class Commands():  
     temp_directory = global_variable.temp_directory + 'commands'   
@@ -22,43 +21,45 @@ class Commands():
         self.name = command['name']
         if command.has_key('trigger'):
             self.trigger = command['trigger']
+        else:
+            self.trigger = None
         self.file_addr = utils.get_file_addr(Commands.files, self.name, Commands.temp_directory, 'txt')
         self.parsed_output = {}
+    
+    def __trigger_check(self, handoff):
+        if self.trigger:                                # check the existence of trigger value
+            with global_variable.trigger_lock:          # wait for lock acquisition
+                for queue in handoff['handoffq']:
+                    if global_variable.is_triggered == 0:
+                        if monitor_utils.is_trigger_hits(queue['drops'], self.trigger):
+                            print('triggered -> commands')
+                            monitor_utils.do_start_perf()
+                        else: 
+                            continue
+                    break
                 
-    def get_handoff(self, command) :
+    def get_handoff(self, command, bandwidth) :
             command_output = utils.execute_command(command)   
             current_output = {}
-            current_output[time.time()] = eval(command_output)
+            time_stamp = time.time()
+            current_output[time_stamp] = {}
+            current_output[time_stamp]['bandwidth'] = bandwidth
+            current_output[time_stamp]['handoffq'] = eval(command_output)['handoffq']
             self.parsed_output[self.name].append(current_output)
             
             self.parsed_output = Commands.poison_queue(self.parsed_output)
+            # take out current value
+            command_output = self.parsed_output['handoff'][len(self.parsed_output['handoff']) - 1][time_stamp]
             
-            with global_variable.trigger_lock:
-                if global_variable.auto_mode and global_variable.is_triggered == 0:
-                    # output_poisoned = Commands.poison_queue(self.parsed_output)
-
-                    index = len(self.parsed_output['handoff']) - 1
-                    TS = self.parsed_output['handoff'][index]
-                    for queue in TS[TS.items()[0][0]]['handoffq']:
-                        try:
-                            if queue['drops'] >= self.trigger:
-                                print('triggered -> commands')
-                            for count in range(PerfGlobals.number_of_record):
-                                output_file = 'perf_record_{0}.data'.format(count+1)
-                                PerfDiag.do_perf_record(output_file)
-                            for count in range(PerfGlobals.number_of_sched):
-                                output_file = 'perf_sched_{0}.data'.format(count+1)
-                                PerfDiag.do_perf_sched(output_file)
-                                global_variable.is_triggered = 1
-                                break
-                        except:
-                            pass                # instance variable trigger not found
+            if global_variable.auto_mode and global_variable.is_triggered == 0:
+                self.__trigger_check(command_output)
                         
             return command_output
         
-    def get_custom_commands(self, command):
+    def get_custom_commands(self, command, bandwidth):
         command_output = utils.execute_command(command)
         self.parsed_output.append(str(time.time()))
+        self.parsed_output.append(str(bandwidth))
         self.parsed_output.append(command_output)
         
     def get_command_output(self):
@@ -73,7 +74,9 @@ class Commands():
         
         thread_objects = []
         for sample_count in range(global_variable.no_of_sample):
-            c = utils.CustomTimer(0, target_fun, [utils.get_command_list(Commands.command_list, self.name)])        
+            bandwidth = monitor_utils.get_bandwidth()
+            command = utils.get_command_list(Commands.command_list, self.name)
+            c = utils.CustomTimer(0, target_fun, [command, bandwidth])        
             c.start()
             thread_objects.append(c)
             time.sleep(global_variable.sample_frequency)
