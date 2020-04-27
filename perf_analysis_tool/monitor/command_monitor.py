@@ -17,6 +17,9 @@ class Commands():
         "handoff" : "debug.py -v --handoff "
     }
     
+    if global_variable.threshold_detection_mode:
+        command_threshold = {}
+    
     def __init__(self, command):
         self.name = command['name']
         if command.has_key('trigger'):
@@ -51,7 +54,19 @@ class Commands():
             # take out current value
             command_output = self.parsed_output['handoff'][len(self.parsed_output['handoff']) - 1][time_stamp]
             
-            if global_variable.auto_mode and global_variable.is_triggered == 0:
+            if global_variable.threshold_detection_mode:
+                if not Commands.command_threshold.has_key('handoffq'):
+                    Commands.command_threshold['handoffq'] = {}
+                    for queue in command_output['handoffq']:
+                        # if not Commands.command_threshold.has_key(queue['name']):
+                        Commands.command_threshold['handoffq'][queue['name']] = {}
+                        Commands.command_threshold['handoffq'][queue['name']]['value_based'] = []
+                        Commands.command_threshold['handoffq'][queue['name']]['bandwidth_based'] = []
+                for queue in command_output['handoffq']:
+                    monitor_utils.update_threshold_list(Commands.command_threshold['handoffq'][queue['name']]['value_based'], 'value', queue['drops'], bandwidth)               
+                    monitor_utils.update_threshold_list(Commands.command_threshold['handoffq'][queue['name']]['bandwidth_based'], 'bandwidth', queue['drops'], bandwidth)   
+
+            elif global_variable.auto_mode and global_variable.is_triggered == 0:
                 self.__trigger_check(command_output)
                         
             return command_output

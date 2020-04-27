@@ -8,9 +8,6 @@ import subprocess
 import time
 import os
 
-from monitor.counter_monitor import CounterMonitor 
-from monitor.command_monitor import Commands 
-from monitor.cpu_monitor import CpuMonitor 
 from analysis import root_cause_analysis
 from diag.perf.perf_globals import PerfGlobals
 from diag.perf.perf_diag import PerfDiag
@@ -30,18 +27,21 @@ def get_diag_dump(monitor):
     thread_list = []
     for key in monitor.keys():
         if key == "cpu":
+            from monitor.cpu_monitor import CpuMonitor 
             for process in monitor['cpu']:
                 cpu = CpuMonitor(process)
                 t1 = threading.Thread(target = cpu.get_cpu_profile)
                 t1.start()
                 thread_list.append(t1)
         elif key == "commands" :
+            from monitor.command_monitor import Commands 
             for command in monitor[key]:
                 cmd = Commands(command)
                 t2 = threading.Thread(target = cmd.get_command_output)
                 t2.start()
                 thread_list.append(t2)
         elif key == "counters" :
+            from monitor.counter_monitor import CounterMonitor 
             for counter in monitor[key]:
                 cntr = CounterMonitor(counter)
                 t3 = threading.Thread(target = cntr.get_counters)                
@@ -103,7 +103,18 @@ def main():
             global_variable.no_of_sample = arg_dict['threshold_detection']   
             get_diag_dump(input['monitor']) 
             utils.delete_temporary_files()        
-
+            
+            from monitor.cpu_monitor import CpuMonitor 
+            from monitor.command_monitor import Commands
+            from monitor.counter_monitor import CounterMonitor
+            
+            threshold = {}
+            threshold['cpu'] = CpuMonitor.cpu_threshold
+            threshold['commands'] = Commands.command_threshold
+            threshold['counters'] = CounterMonitor.counter_threshold
+            
+            utils.write_file(threshold, global_variable.output_directory + '/threshold_dump.json')
+            
     else:
         consecutive_threshold_exceed_limit = 0
         while True:

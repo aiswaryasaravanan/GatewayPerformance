@@ -16,6 +16,9 @@ class CpuMonitor:
     files = {
         "all" : "{0}/all.json".format(temp_directory)
     }
+    
+    if global_variable.threshold_detection_mode:
+        cpu_threshold = {}
         
     def __init__(self, process):
         self.name = process['name']
@@ -34,7 +37,7 @@ class CpuMonitor:
                             print('triggered -> cpu')
                             monitor_utils.do_start_perf()
                         
-    def __get_thread(self, proc, thread) :
+    def __get_thread(self, proc, thread, bandwidth) :
         thread_entry = {}
         thread_entry['tid'] = thread.id
         try:
@@ -49,7 +52,15 @@ class CpuMonitor:
         thread_entry['user_time'] = thread.user_time
         thread_entry['system_time'] = thread.system_time   
         
-        if global_variable.auto_mode and global_variable.is_triggered == 0:
+        if global_variable.threshold_detection_mode:
+            if not CpuMonitor.cpu_threshold.has_key(thread_entry['tid']):
+                CpuMonitor.cpu_threshold[thread_entry['tid']] = {}
+                CpuMonitor.cpu_threshold[thread_entry['tid']]['value_based'] = []
+                CpuMonitor.cpu_threshold[thread_entry['tid']]['bandwidth_based'] = []
+            monitor_utils.update_threshold_list(CpuMonitor.cpu_threshold[thread_entry['tid']]['value_based'], 'value', thread_entry['cpu_percent'], bandwidth)               
+            monitor_utils.update_threshold_list(CpuMonitor.cpu_threshold[thread_entry['tid']]['bandwidth_based'], 'bandwidth', thread_entry['cpu_percent'], bandwidth)   
+                                        
+        elif global_variable.auto_mode and global_variable.is_triggered == 0:
             self.__trigger_check(thread_entry['cpu_percent'])
                 
         return thread_entry
@@ -63,7 +74,7 @@ class CpuMonitor:
 
         thread_objects = []
         for thread in proc.threads() :
-            t = utils.CustomTimer(0, self.__get_thread, [proc, thread])
+            t = utils.CustomTimer(0, self.__get_thread, [proc, thread, bandwidth])
             t.start()
             thread_objects.append(t)
             

@@ -24,3 +24,17 @@ def do_start_perf():
 def get_bandwidth():
     bandwidth = random.randint(90000, 200000)
     return bandwidth
+
+def update_threshold_list(threshold_list, key, value, bandwidth):
+    if key == 'value':
+        if len(threshold_list) == 2:
+            index = threshold_list.index(min(threshold_list, key = lambda entry : entry[key]))
+            threshold_list.remove(threshold_list[index])
+    elif key == 'bandwidth':
+        if len(threshold_list) == 2:
+            index = threshold_list.index(max(threshold_list, key = lambda entry : entry[key]))
+            threshold_list.remove(threshold_list[index])
+    entry = {}
+    entry['value'] = value
+    entry['bandwidth'] = bandwidth
+    threshold_list.append(entry)

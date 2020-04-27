@@ -18,12 +18,6 @@
 		"commands" : [
 			{
 				"name" : "handoff"
-			},
-			{
-				"name" : "edged -v"
-			},
-			{
-				"name" : "top -H -n 1"
 			}
 		],
 		"counters" : [

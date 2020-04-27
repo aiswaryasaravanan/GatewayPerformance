@@ -17,6 +17,9 @@ class CounterMonitor:
         "dpdk_interface" : "debug.py -v --dpdk_ports_dump"
     }
     
+    if global_variable.threshold_detection_mode:
+        counter_threshold = {}
+    
     def __init__(self, counter):
         self.name = counter['name']
         if counter.has_key('trigger'):
@@ -76,15 +79,25 @@ class CounterMonitor:
             c.start()
             current_sample = {}
             current_sample[time_stamp] = {}
-            current_sample[time_stamp]['bandwidth'] = monitor_utils.get_bandwidth()
+            bandwidth = monitor_utils.get_bandwidth()
+            current_sample[time_stamp]['bandwidth'] = bandwidth
             current_sample[time_stamp]['counter'] = c.join()
             self.parsed_output['counters'].append(current_sample)
             
             self.parsed_output = CounterMonitor.poison_counters(self.parsed_output)
             # take out current entry
             current_sample = self.parsed_output['counters'][len(self.parsed_output['counters']) - 1]
-            
-            if global_variable.auto_mode and global_variable.is_triggered == 0:
+            if global_variable.threshold_detection_mode:
+                counters = current_sample[time_stamp]['counter']
+                for cntr in counters:
+                    if not CounterMonitor.counter_threshold.has_key(cntr):
+                        CounterMonitor.counter_threshold[cntr] = {}
+                        CounterMonitor.counter_threshold[cntr]['value_based'] = []
+                        CounterMonitor.counter_threshold[cntr]['bandwidth_based'] = []
+                    monitor_utils.update_threshold_list(CounterMonitor.counter_threshold[cntr]['value_based'], 'value', counters[cntr], bandwidth)
+                    monitor_utils.update_threshold_list(CounterMonitor.counter_threshold[cntr]['bandwidth_based'], 'bandwidth', counters[cntr], bandwidth)
+ 
+            elif global_variable.auto_mode and global_variable.is_triggered == 0:
                 self.__trigger_check(current_sample[time_stamp]['counter'])
             
             time.sleep(global_variable.sample_frequency)
