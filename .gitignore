@@ -2,3 +2,5 @@ try1
 .vscode
 report
 perf_latency.py
+test
+perf-analysis-report.txt
