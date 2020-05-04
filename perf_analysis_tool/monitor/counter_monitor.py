@@ -19,6 +19,10 @@ class CounterMonitor:
     
     if global_variable.threshold_detection_mode:
         counter_threshold = {}
+    elif global_variable.auto_mode:
+        from monitor import threshold_dump
+        if threshold_dump:
+            threshold_dump_counter = threshold_dump['counters']
     
     def __init__(self, counter):
         self.name = counter['name']
@@ -54,15 +58,22 @@ class CounterMonitor:
         return current_output
         
     def __trigger_check(self, counter):
-        if self.trigger:                                # check the existence of trigger value
             with global_variable.trigger_lock:          # wait for lock acquisition
                 for cntr in counter:
                     if global_variable.is_triggered == 0:
-                        if monitor_utils.is_trigger_hits(counter[cntr], self.trigger):
-                            print('triggered -> counters')
-                            monitor_utils.do_start_perf()
-                        else: 
-                            continue
+                        if self.trigger:
+                            trigger_value = self.trigger
+                        elif CounterMonitor.threshold_dump_counter.has_key(cntr):
+                            mode = global_variable.mode
+                            trigger_value = monitor_utils.get_threshold(CounterMonitor.threshold_dump_counter[cntr], mode)
+                            
+                        if 'trigger_value' in locals():
+                            if monitor_utils.is_trigger_hits(counter[cntr], trigger_value):
+                                print('triggered -> counters')
+                                print(cntr, counter[cntr], trigger_value)
+                                monitor_utils.do_start_perf()
+                            else: 
+                                continue
                     break
     
     def get_counters(self) :
@@ -87,6 +98,9 @@ class CounterMonitor:
             self.parsed_output = CounterMonitor.poison_counters(self.parsed_output)
             # take out current entry
             current_sample = self.parsed_output['counters'][len(self.parsed_output['counters']) - 1]
+            # current_sample = eval(current_sample)
+
+            
             if global_variable.threshold_detection_mode:
                 counters = current_sample[time_stamp]['counter']
                 for cntr in counters:
@@ -108,6 +122,10 @@ class CounterMonitor:
     def poison_counters(counters) :
         length = len(counters['counters'])
         if length == 1:
+            entry = counters['counters'][0]
+            TS = entry.items()[0][0]
+            for cntr in entry[TS]['counter']:
+                entry[TS]['counter'][cntr] = utils.modify_drop(entry[TS]['counter'][cntr])
             pass
         else:
             current_index = length - 1

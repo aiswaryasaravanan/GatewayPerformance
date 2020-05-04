@@ -14,6 +14,54 @@ from collections import OrderedDict
 import global_variable 
 from diag.perf.perf_globals import PerfGlobals
 
+def check_validity(arg_dict):
+    if not ( arg_dict['auto_mode'] and arg_dict['threshold_detection_mode'] ):
+        if arg_dict['samples_count'] or arg_dict['output_file']:
+            if arg_dict['threshold_detection_mode']:
+                return True
+            return False
+        if arg_dict['window_size'] or arg_dict['consecutive_threshold_exceed_limit'] or arg_dict['mode'] or arg_dict['input_file']:
+            if arg_dict['auto_mode']:
+                return True
+            return False
+        return True
+    else:
+        return False
+    
+def set_default(arg_dict):
+    if arg_dict['threshold_detection_mode'] and not arg_dict['samples_count']:
+        arg_dict['samples_count'] = 10
+        
+    if arg_dict['threshold_detection_mode'] and not arg_dict['output_file']:
+        arg_dict['output_file'] = 'threshold.json'
+        if is_file_exists('threshold.json'):
+            rename_file('threshold.json', 'threshold.json.old')
+        
+    if arg_dict['auto_mode'] and not arg_dict['window_size']:
+        arg_dict['window_size'] = 5
+        
+    if arg_dict['auto_mode'] and not arg_dict['consecutive_threshold_exceed_limit']:
+        arg_dict['consecutive_threshold_exceed_limit'] = 2
+        
+    if arg_dict['auto_mode'] and not arg_dict['mode']:
+        arg_dict['mode'] = 'value'
+        
+    if arg_dict['auto_mode'] and not arg_dict['input_file']:
+        arg_dict['input_file'] = 'threshold.json'
+        
+def set_globals(arg_dict):
+    global_variable.threshold_detection_mode = arg_dict['threshold_detection_mode']
+    if arg_dict['threshold_detection_mode']:
+        global_variable.no_of_sample = arg_dict['samples_count']
+        global_variable.threshold_dump_file = arg_dict['output_file']
+    
+    global_variable.auto_mode = arg_dict['auto_mode']
+    if arg_dict['auto_mode']:
+        global_variable.window_size = arg_dict['window_size']
+        global_variable.consecutive_threshold_exceed_limit = arg_dict['consecutive_threshold_exceed_limit']
+        global_variable.mode = arg_dict['mode']
+        global_variable.threshold_dump_file = arg_dict['input_file']
+
 class CustomTimer(_Timer):
     def __init__(self, interval, function, args=[], kwargs={}):
         self._original_function = function

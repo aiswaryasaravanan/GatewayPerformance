@@ -1,10 +1,13 @@
+import sys
+sys.path.append('perf_analysis_tool')
+
 import global_variable
 from diag.perf.perf_diag import PerfDiag
 from diag.perf.perf_globals import PerfGlobals    
-import random
+import utils
     
 def is_trigger_hits(drop, trigger_value):
-    if drop >= trigger_value:
+    if float(drop) >= float(trigger_value):
         return True
     return False
     
@@ -22,8 +25,11 @@ def do_start_perf():
     global_variable.is_triggered = 1
     
 def get_bandwidth():
-    bandwidth = random.randint(90000, 200000)
-    return bandwidth
+    output = utils.execute_command('debug.py -v --link')
+    output = eval(output)
+    for link in output:
+        if link['vpnState'] == 'STABLE':
+            return link['bpsOfBestPathTx']
 
 def update_threshold_list(threshold_list, key, value, bandwidth):
     if key == 'value':
@@ -38,3 +44,9 @@ def update_threshold_list(threshold_list, key, value, bandwidth):
     entry['value'] = value
     entry['bandwidth'] = bandwidth
     threshold_list.append(entry)
+    
+def get_threshold(threshold_dump, key):
+    if key == 'value':
+        return max(threshold_dump['value_based'], key = lambda entry : entry[key])['value']
+    elif key == 'bandwidth':
+        return min(threshold_dump['bandwidth_based'], key = lambda entry : entry[key])['value']

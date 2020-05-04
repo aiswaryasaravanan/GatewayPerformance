@@ -19,6 +19,10 @@ class CpuMonitor:
     
     if global_variable.threshold_detection_mode:
         cpu_threshold = {}
+    elif global_variable.auto_mode:
+        from monitor import threshold_dump
+        if threshold_dump:
+            threshold_dump_cpu = threshold_dump['cpu']
         
     def __init__(self, process):
         self.name = process['name']
@@ -29,13 +33,19 @@ class CpuMonitor:
         self.file_addr = utils.get_file_addr(CpuMonitor.files, self.name, CpuMonitor.temp_directory, 'json')
         self.parsed_output = {}
         
-    def __trigger_check(self, cpu_percent):
+    def __trigger_check(self, tid, cpu_percent):
         if self.trigger:
+            trigger_value = self.trigger
+        elif CpuMonitor.threshold_dump_cpu.has_key(tid):
+            mode = global_variable.mode
+            trigger_value = monitor_utils.get_threshold(CpuMonitor.threshold_dump_cpu[tid], mode)
+        
+        if 'trigger_value' in locals():
             with global_variable.trigger_lock: 
                 if global_variable.is_triggered == 0:
-                    if monitor_utils.is_trigger_hits(cpu_percent, self.trigger):
-                            print('triggered -> cpu')
-                            monitor_utils.do_start_perf()
+                    if monitor_utils.is_trigger_hits(cpu_percent, trigger_value):
+                        print('triggered -> cpu')
+                        monitor_utils.do_start_perf()
                         
     def __get_thread(self, proc, thread, bandwidth) :
         thread_entry = {}
@@ -61,7 +71,7 @@ class CpuMonitor:
             monitor_utils.update_threshold_list(CpuMonitor.cpu_threshold[thread_entry['tid']]['bandwidth_based'], 'bandwidth', thread_entry['cpu_percent'], bandwidth)   
                                         
         elif global_variable.auto_mode and global_variable.is_triggered == 0:
-            self.__trigger_check(thread_entry['cpu_percent'])
+            self.__trigger_check(thread_entry['tid'], thread_entry['cpu_percent'])
                 
         return thread_entry
     
