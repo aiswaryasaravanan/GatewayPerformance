@@ -115,7 +115,6 @@ def counter_based_critical_items():
 def drop_based_critical_items():
     from monitor.command_monitor import Commands
     handoff = utils.load_data(utils.get_file_addr(Commands.files, "handoff")) 
-    # handoff = Commands.poison_queue(handoff)
 
     critical_items = defaultdict(dict)
 

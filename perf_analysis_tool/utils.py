@@ -15,6 +15,7 @@ import global_variable
 from diag.perf.perf_globals import PerfGlobals
 
 def check_validity(arg_dict):
+
     if not ( arg_dict['auto_mode'] and arg_dict['threshold_detection_mode'] ):
         if arg_dict['samples_count'] or arg_dict['output_file']:
             if arg_dict['threshold_detection_mode']:
@@ -50,6 +51,9 @@ def set_default(arg_dict):
         arg_dict['input_file'] = 'threshold.json'
         
 def set_globals(arg_dict):
+    
+    global_variable.offline_mode = arg_dict['filename']
+    
     global_variable.threshold_detection_mode = arg_dict['threshold_detection_mode']
     if arg_dict['threshold_detection_mode']:
         global_variable.no_of_sample = arg_dict['samples_count']

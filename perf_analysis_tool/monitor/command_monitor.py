@@ -18,7 +18,7 @@ class Commands():
     }
     
     if global_variable.threshold_detection_mode:
-        command_threshold = {}
+        threshold_dump_commands = {}
     elif global_variable.auto_mode:
         from monitor import threshold_dump
         if threshold_dump:
@@ -32,57 +32,26 @@ class Commands():
             self.trigger = None
         self.file_addr = utils.get_file_addr(Commands.files, self.name, Commands.temp_directory, 'txt')
         self.parsed_output = {}
-    
-    def __trigger_check(self, handoff):
-        
-        with global_variable.trigger_lock:          # wait for lock acquisition
-            for queue in handoff['handoffq']:
-                if global_variable.is_triggered == 0:
-                    if self.trigger:
-                        trigger_value = self.trigger
-                    elif Commands.threshold_dump_commands['handoffq'].has_key(queue['name']):
-                        mode = global_variable.mode
-                        trigger_value = monitor_utils.get_threshold(Commands.threshold_dump_commands['handoffq'][queue['name']], mode)
-                        
-                    if 'trigger_value' in locals():
-                        if monitor_utils.is_trigger_hits(queue['drops'], trigger_value):
-                            print('triggered -> commands')
-                            print(queue['name'], queue['drops'], trigger_value)
-                            monitor_utils.do_start_perf()
-                        else: 
-                            continue
-                break
-                
+                            
     def get_handoff(self, command, bandwidth) :
-            command_output = utils.execute_command(command)   
-            current_output = {}
-            time_stamp = time.time()
-            current_output[time_stamp] = {}
-            current_output[time_stamp]['bandwidth'] = bandwidth
-            current_output[time_stamp]['handoffq'] = eval(command_output)['handoffq']
-            self.parsed_output[self.name].append(current_output)
+        command_output = utils.execute_command(command)   
+        current_sample = {}
+        time_stamp = time.time()
+        current_sample[time_stamp] = {}
+        current_sample[time_stamp]['bandwidth'] = bandwidth
+        current_sample[time_stamp]['handoffq'] = eval(command_output)['handoffq']
+        self.parsed_output[self.name].append(current_sample)
             
-            self.parsed_output = Commands.poison_queue(self.parsed_output)
-            # take out current value
-            command_output = self.parsed_output['handoff'][len(self.parsed_output['handoff']) - 1][time_stamp]
-            # command_output = eval(command_output)
+        self.parsed_output = Commands.poison_queue(self.parsed_output)
+        command_output = self.parsed_output['handoff'][len(self.parsed_output['handoff']) - 1][time_stamp]
             
-            if global_variable.threshold_detection_mode:
-                if not Commands.command_threshold.has_key('handoffq'):
-                    Commands.command_threshold['handoffq'] = {}
-                    for queue in command_output['handoffq']:
-                        # if not Commands.command_threshold.has_key(queue['name']):
-                        Commands.command_threshold['handoffq'][queue['name']] = {}
-                        Commands.command_threshold['handoffq'][queue['name']]['value_based'] = []
-                        Commands.command_threshold['handoffq'][queue['name']]['bandwidth_based'] = []
-                for queue in command_output['handoffq']:
-                    monitor_utils.update_threshold_list(Commands.command_threshold['handoffq'][queue['name']]['value_based'], 'value', queue['drops'], bandwidth)               
-                    monitor_utils.update_threshold_list(Commands.command_threshold['handoffq'][queue['name']]['bandwidth_based'], 'bandwidth', queue['drops'], bandwidth)   
-
-            elif global_variable.auto_mode and global_variable.is_triggered == 0:
-                self.__trigger_check(command_output)
+        if global_variable.threshold_detection_mode:
+            self.__find_threshold(command_output, bandwidth)
+            
+        elif global_variable.auto_mode and global_variable.is_triggered == 0:
+            self.__trigger_check(command_output)
                         
-            return command_output
+        return command_output
         
     def get_custom_commands(self, command, bandwidth):
         command_output = utils.execute_command(command)
@@ -113,6 +82,36 @@ class Commands():
             tObj.join()
             
         Commands.dump_output(self.parsed_output, self.file_addr, self.file_type)
+        
+    def __find_threshold(command_output, bandwidth):
+        if not Commands.threshold_dump_commands.has_key('handoffq'):
+            Commands.threshold_dump_commands['handoffq'] = {}
+            for queue in command_output['handoffq']:
+                # if not Commands.threshold_dump_commands.has_key(queue['name']):
+                Commands.threshold_dump_commands['handoffq'][queue['name']] = {}
+                Commands.threshold_dump_commands['handoffq'][queue['name']]['value_based'] = []
+                Commands.threshold_dump_commands['handoffq'][queue['name']]['bandwidth_based'] = []
+        for queue in command_output['handoffq']:
+            monitor_utils.update_threshold_list(Commands.threshold_dump_commands['handoffq'][queue['name']]['value_based'], 'value', queue['drops'], bandwidth)               
+            monitor_utils.update_threshold_list(Commands.threshold_dump_commands['handoffq'][queue['name']]['bandwidth_based'], 'bandwidth', queue['drops'], bandwidth)   
+
+    def __trigger_check(self, handoff):
+        with global_variable.trigger_lock:          # wait for lock acquisition
+            for queue in handoff['handoffq']:
+                if global_variable.is_triggered == 0:
+                    if self.trigger:
+                        trigger_value = self.trigger
+                    elif Commands.threshold_dump_commands['handoffq'].has_key(queue['name']):
+                        mode = global_variable.mode
+                        trigger_value = monitor_utils.get_threshold(Commands.threshold_dump_commands['handoffq'][queue['name']], mode)
+                        
+                    if 'trigger_value' in locals():
+                        if monitor_utils.is_trigger_hits(queue['drops'], trigger_value):
+                            print('triggered -> commands')
+                            monitor_utils.do_start_perf()
+                        else: 
+                            continue
+                break
             
     @staticmethod
     def poison_queue(handoff) :

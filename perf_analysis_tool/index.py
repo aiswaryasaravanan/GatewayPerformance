@@ -31,7 +31,6 @@ def parse_command_line_arguments():
     return vars(args)
 
 def get_diag_dump(monitor):
-    global_variable.trigger_lock = threading.Lock()
     thread_list = []
     for key in monitor.keys():
         if key == "cpu":
@@ -66,14 +65,17 @@ def init_global_variable(input):
     global_variable.output_directory = input['output_directory']
         
 def init(input):
-    utils.clear_directory(global_variable.temp_directory)
+    
     init_global_variable(input)
     
-    for diag_key in input['diag']:
-        if diag_key == 'perf':
-            perf_list = input['diag']['perf']
-            perf_global_singleton_obj = PerfGlobals(perf_list['record'], perf_list['sched'], perf_list['stat'], perf_list['latency'])
-            
+    if input.has_key('diag'):
+        for diag_key in input['diag']:
+            if diag_key == 'perf':
+                perf_list = input['diag']['perf']
+                perf_global_singleton_obj = PerfGlobals(perf_list['record'], perf_list['sched'], perf_list['stat'], perf_list['latency'])
+                
+    utils.clear_directory(global_variable.temp_directory)
+    # if output directory exists -> make rename it with old tag
     utils.create_directory(global_variable.output_directory)
                     
 def main():
@@ -88,7 +90,7 @@ def main():
         utils.set_default(arg_dict)
         utils.set_globals(arg_dict)
                         
-        if arg_dict['filename']:                                # -F option given
+        if global_variable.offline_mode:                                
             print("perform zip op")
             # time_stamp = time.time()
             # utils.unzip_output(arg_dict.items()[0][1], input['output_directory'])
@@ -99,40 +101,38 @@ def main():
             # utils.print_table(critical_items)
             # utils.delete_temporary_files()    
                 
-        elif arg_dict['threshold_detection_mode']:
-            global_variable.threshold_detection_mode = True
+        elif global_variable.threshold_detection_mode:
             get_diag_dump(input['monitor']) 
             utils.delete_temporary_files()        
                 
-            from monitor.cpu_monitor import CpuMonitor 
-            from monitor.command_monitor import Commands
-            from monitor.counter_monitor import CounterMonitor
-                
             threshold = {}
+            from monitor.cpu_monitor import CpuMonitor 
             threshold['cpu'] = CpuMonitor.cpu_threshold
+            
+            from monitor.command_monitor import Commands
             threshold['commands'] = Commands.command_threshold
+            
+            from monitor.counter_monitor import CounterMonitor
             threshold['counters'] = CounterMonitor.counter_threshold
                 
             utils.write_file(threshold, global_variable.threshold_dump_file)
-                
-        else:
+            
+        elif global_variable.auto_mode:
             consecutive_threshold_exceed_limit = 0
             while True:
-
                 utils.create_directory(global_variable.temp_directory)
                 time_stamp = time.time()
                 
+                global_variable.trigger_lock = threading.Lock()
                 if input.has_key('monitor'):
                     get_diag_dump(input['monitor'])
-                    while global_variable.auto_mode and global_variable.is_triggered == 0:
-                        print("inside auto mode waiting for istrigered to set... calculated diag dump")
+                    while global_variable.is_triggered == 0:
                         manifest.create_manifest()
                         utils.zip_output(time_stamp)
                         utils.delete_temporary_files()
+                        global_variable.trigger_lock = threading.Lock()
                         get_diag_dump(input['monitor'])
-                        
-                    print("diagDump collected")
-                        
+                                            
                     manifest.create_manifest()
                     if input['analysis'] and input['diag']:
                         diag_list = [tool for tool in input['diag']]
@@ -143,15 +143,30 @@ def main():
                     utils.zip_output(time_stamp)
                     utils.delete_temporary_files()
 
-                if not global_variable.auto_mode :
-                    break
-
                 consecutive_threshold_exceed_limit += 1
                 if consecutive_threshold_exceed_limit == global_variable.consecutive_threshold_exceed_limit :
                     break
+                
+        else:
+            
+            time_stamp = time.time()
+            if input.has_key('monitor'):
+                get_diag_dump(input['monitor'])                            
+                manifest.create_manifest()
+                    
+                if input['analysis'] and input['diag']:
+                    diag_list = [tool for tool in input['diag']]
+                    critical_items = root_cause_analysis.extract_critical_items(input['analysis'], diag_list)
+                    utils.create_summary(critical_items)
+                    utils.print_table(critical_items)
+
+                utils.zip_output(time_stamp)
+                utils.delete_temporary_files()
+
         
     else:
         print("something went wrong")    
 
 if __name__ == "__main__" :
     main()
+

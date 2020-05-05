@@ -3,7 +3,9 @@ sample_frequency = 0
 no_of_sample = 0
 output_directory = None
 
-temp_directory = 'temp_result/'   
+temp_directory = 'temp_result/'  
+
+offline_mode = False 
 
 threshold_detection_mode = False 
 threshold_dump_file = ''

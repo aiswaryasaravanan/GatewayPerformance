@@ -36,9 +36,9 @@ class CpuMonitor:
     def __trigger_check(self, tid, cpu_percent):
         if self.trigger:
             trigger_value = self.trigger
-        elif CpuMonitor.threshold_dump_cpu.has_key(tid):
+        elif CpuMonitor.threshold_dump_cpu.has_key(str(tid)):
             mode = global_variable.mode
-            trigger_value = monitor_utils.get_threshold(CpuMonitor.threshold_dump_cpu[tid], mode)
+            trigger_value = monitor_utils.get_threshold(CpuMonitor.threshold_dump_cpu[str(tid)], mode)
         
         if 'trigger_value' in locals():
             with global_variable.trigger_lock: 
@@ -131,20 +131,32 @@ class CpuMonitor:
             if proc != None:
                 self.parsed_output[self.name] = self.__get_details(proc)
         
-        self.__call_repeatedly(self.__collect_sample)
-        CpuMonitor.dump_output(self.parsed_output, self.file_addr)
+        # self.__call_repeatedly(self.__collect_sample)
         
-    def __call_repeatedly(self, target_fun):
         thread_objects = []
         for sample_count in range(global_variable.no_of_sample):
             bandwidth = monitor_utils.get_bandwidth() 
-            tObj = threading.Thread(target = target_fun, args = [bandwidth, ])
+            tObj = threading.Thread(target = self.__collect_sample, args = [bandwidth, ])
             tObj.start()
             thread_objects.append(tObj)
             time.sleep(global_variable.sample_frequency)
         
         for tObj in thread_objects:
             tObj.join()
+        
+        CpuMonitor.dump_output(self.parsed_output, self.file_addr)
+        
+    # def __call_repeatedly(self, target_fun):
+    #     thread_objects = []
+    #     for sample_count in range(global_variable.no_of_sample):
+    #         bandwidth = monitor_utils.get_bandwidth() 
+    #         tObj = threading.Thread(target = target_fun, args = [bandwidth, ])
+    #         tObj.start()
+    #         thread_objects.append(tObj)
+    #         time.sleep(global_variable.sample_frequency)
+        
+    #     for tObj in thread_objects:
+    #         tObj.join()
             
     @staticmethod
     def __find_index(data, proc) :
