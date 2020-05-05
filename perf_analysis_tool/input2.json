@@ -9,8 +9,7 @@
 	"monitor" : {
 		"cpu" : [
 			{
-				"name" : "all",
-				"trigger" : 3.75
+				"name" : "all"
 			},
 			{
 				"name" : "edged"
@@ -21,8 +20,7 @@
 		],
 		"commands" : [
 			{
-				"name" : "handoff",
-				"trigger" : 750
+				"name" : "handoff"
 			},
 			{
 				"name" : "edged -v"
@@ -33,26 +31,24 @@
 		],
 		"counters" : [
 			{
-				"name" : "dpdk_counters",
-				"trigger" : 4000
+				"name" : "dpdk_counters"
 			},
 			{
-				"name" : "memb.mod_dns_data_buffer_t.tot_bytes",
-				"trigger" : 3000
+				"name" : "memb.mod_dns_data_buffer_t.tot_bytes"
 			},
 			{
-				"name" : "memb.mod_vc_peer_qos_seg_stats_t.tot_bytes",
-				"trigger" : 5000
+				"name" : "memb.mod_vc_peer_qos_seg_stats_t.tot_bytes"
 			},
 			{
-				"name" : "memb.mod_vc_link_cos_qos_t.tot_bytes"
+				"name" : "memb.mod_vc_link_cos_qos_t.tot_bytes",
+				"trigger" : 11750
 			},
 			{
-				"name" : "memb.mod_vc_qos_calc_deqrate_t.tot_bytes"
+				"name" : "memb.mod_vc_qos_calc_deqrate_t.tot_bytes",
+				"trigger": 10000
 			},
 			{
-				"name" : "memb.mod_vc_qos_calc_deqrate_slot_t.tot_bytes",
-				"trigger" : 6000
+				"name" : "memb.mod_vc_qos_calc_deqrate_slot_t.tot_bytes"
 			}		
 		]
 	},

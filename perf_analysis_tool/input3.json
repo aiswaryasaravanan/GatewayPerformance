@@ -2,11 +2,6 @@
 	"duration" : 15,
 	"sample_frequency" : 5,
     "output_directory" : "/root/perf-analysis/result",
-    "auto_mode" : {
-        "find_trigger" : 1,
-        "consecutive_threshold_exceed_limit" : 3,
-        "window_size" : 2
-    },
 	"monitor" : {
 		"cpu" : [
 			{
@@ -22,12 +17,6 @@
 		"commands" : [
 			{
 				"name" : "handoff"
-			},
-			{
-				"name" : "edged -v"
-			},
-			{
-				"name" : "top -H -n 1"
 			}
 		],
 		"counters" : [
@@ -51,47 +40,6 @@
 			}		
 		]
 	},
-	"analysis" : [
-		"cpu",
-		"handoff_drops",
-		"counters"
-	],
-	"diag" : {
-		"perf" : {
-			"record" : {
-				"sleep" : 3,
-				"frequency" : 999,
-				"number_of_record" : 2,
-				"delay_between_record" : 2
-			},
-			"sched" : {
-				"sleep" : 3,
-				"number_of_sched" : 2,
-				"delay_between_sched" : 2
-			},
-			"latency" : [
-				"Switches",
-				"Average delay"
-			],
-			"stat" : {
-				"sleep" : 0.01,
-				"events" : [
-					"dTLB-loads",
-					"dTLB-load-misses",
-					"dTLB-stores", 
-					"dTLB-store-misses", 
-					"iTLB-loads", 
-					"iTLB-load-misses", 
-					"LLC-loads", 
-					"LLC-load-misses", 
-					"LLC-stores", 
-					"LLC-store-misses", 
-					"LLC-prefetch-misses", 
-					"page-faults", 
-					"cache-misses", 
-					"cache-references"
-				]
-			}
-		}
-	}
+	"analysis" : [],
+	"diag" : {}
 }

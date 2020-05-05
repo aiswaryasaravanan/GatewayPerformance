@@ -5,9 +5,6 @@ from collections import OrderedDict, defaultdict
 
 import utils
 import global_variable
-from monitor.counter_monitor import CounterMonitor
-from monitor.command_monitor import Commands
-from monitor.cpu_monitor import CpuMonitor
 from diag.perf.perf_diag import PerfDiag
 from diag.perf.perf_globals import PerfGlobals
 
@@ -94,6 +91,7 @@ def get_data_dict(data, fields):
     return data_dict
 
 def counter_based_critical_items():
+    from monitor.counter_monitor import CounterMonitor
     file_list = utils.list_files(CounterMonitor.temp_directory)
     
     critical_items = defaultdict()
@@ -102,8 +100,8 @@ def counter_based_critical_items():
         # counters = CounterMonitor.poison_counters(counters)
 
         for TS in counters['counters']:
-            for counter in TS[TS.items()[0][0]]:
-                drop = TS[TS.items()[0][0]][counter]
+            for counter in TS[TS.items()[0][0]]['counter']:
+                drop = TS[TS.items()[0][0]]['counter'][counter]
                 if not critical_items.has_key(counter):
                     critical_items[counter] = []
                 critical_items[counter].append(int(drop))
@@ -115,8 +113,8 @@ def counter_based_critical_items():
     return utils.get_top_10(sorted_res)
 
 def drop_based_critical_items():
+    from monitor.command_monitor import Commands
     handoff = utils.load_data(utils.get_file_addr(Commands.files, "handoff")) 
-    # handoff = Commands.poison_queue(handoff)
 
     critical_items = defaultdict(dict)
 
@@ -136,6 +134,7 @@ def drop_based_critical_items():
     return utils.get_top_10(sorted_res)
 
 def cpu_based_critical_items():
+    from monitor.cpu_monitor import CpuMonitor
     data = utils.load_data(utils.get_file_addr(CpuMonitor.files, "all"))
     critical_items = defaultdict(dict)
 
@@ -165,7 +164,8 @@ def extract_critical_items(analysis_list, diag_list):
         elif category == 'counters':
             critical_items['counters'] = counter_based_critical_items()
             
-    if diag_list.has_key('perf'):
+    tool = 'perf'
+    if tool in diag_list:
         critical_items = do_perf_diag(critical_items)
             
     return critical_items
