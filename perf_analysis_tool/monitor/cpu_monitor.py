@@ -18,7 +18,7 @@ class CpuMonitor:
     }
     
     if global_variable.threshold_detection_mode:
-        cpu_threshold = {}
+        threshold_dump_cpu = {}
     elif global_variable.auto_mode:
         from monitor import threshold_dump
         if threshold_dump:
@@ -31,112 +31,80 @@ class CpuMonitor:
         else:
             self.trigger = None
         self.file_addr = utils.get_file_addr(CpuMonitor.files, self.name, CpuMonitor.temp_directory, 'json')
-        self.parsed_output = {}
-        
-    def __trigger_check(self, tid, cpu_percent):
-        if self.trigger:
-            trigger_value = self.trigger
-        elif CpuMonitor.threshold_dump_cpu.has_key(str(tid)):
-            mode = global_variable.mode
-            trigger_value = monitor_utils.get_threshold(CpuMonitor.threshold_dump_cpu[str(tid)], mode)
-        
-        if 'trigger_value' in locals():
-            with global_variable.trigger_lock: 
-                if global_variable.is_triggered == 0:
-                    if monitor_utils.is_trigger_hits(cpu_percent, trigger_value):
-                        print('triggered -> cpu')
-                        monitor_utils.do_start_perf()
-                        
-    def __get_thread(self, proc, thread, bandwidth) :
+        self.parsed_output = []
+                   
+    def _get_thread(self, proc, thread, bandwidth) :
         thread_entry = {}
         thread_entry['tid'] = thread.id
-        try:
-            t = psutil.Process(thread.id)
-            thread_entry['name'] = t.name()
-        except:
-            return None
-        try:
-            thread_entry['cpu_percent'] = CpuMonitor.__get_cpu_percent(proc, thread)
-        except:
-            thread_entry['cpu_percent'] = 0.0    
+        thread_entry['name'] = CpuMonitor.get_process_name(thread_entry['tid'])
+        thread_entry['cpu_percent'] = CpuMonitor._get_cpu_percent(proc, thread) 
         thread_entry['user_time'] = thread.user_time
         thread_entry['system_time'] = thread.system_time   
         
         if global_variable.threshold_detection_mode:
-            if not CpuMonitor.cpu_threshold.has_key(thread_entry['tid']):
-                CpuMonitor.cpu_threshold[thread_entry['tid']] = {}
-                CpuMonitor.cpu_threshold[thread_entry['tid']]['value_based'] = []
-                CpuMonitor.cpu_threshold[thread_entry['tid']]['bandwidth_based'] = []
-            monitor_utils.update_threshold_list(CpuMonitor.cpu_threshold[thread_entry['tid']]['value_based'], 'value', thread_entry['cpu_percent'], bandwidth)               
-            monitor_utils.update_threshold_list(CpuMonitor.cpu_threshold[thread_entry['tid']]['bandwidth_based'], 'bandwidth', thread_entry['cpu_percent'], bandwidth)   
-                                        
+            monitor_utils.find_threshold(CpuMonitor.threshold_dump_cpu, thread_entry['tid'], thread_entry['cpu_percent'], bandwidth)
+                           
         elif global_variable.auto_mode and global_variable.is_triggered == 0:
-            self.__trigger_check(thread_entry['tid'], thread_entry['cpu_percent'])
+            with global_variable.trigger_lock:          # wait for lock acquisition
+                monitor_utils.trigger_check(self.trigger, CpuMonitor.threshold_dump_cpu, thread_entry['tid'], thread_entry['cpu_percent'])
                 
         return thread_entry
     
-    def __get_sample(self, proc, bandwidth) :
+    def _get_sample(self, proc, bandwidth) :
+        
         sample = {}
-        time_stamp = time.time()
-        sample[time_stamp] = {}
-        sample[time_stamp]['bandwidth'] = bandwidth
-        sample[time_stamp]['cpu_percent'] = proc.cpu_percent(interval = 0.1)
+        sample['time_stamp'] = time.time()
+        sample['bandwidth'] = bandwidth
+        sample['cpu_percent'] = proc.cpu_percent(interval = 0.1)
 
         thread_objects = []
         for thread in proc.threads() :
-            t = utils.CustomTimer(0, self.__get_thread, [proc, thread, bandwidth])
+            t = utils.CustomTimer(0, self._get_thread, [proc, thread, bandwidth])
             t.start()
             thread_objects.append(t)
             
         for t in thread_objects:
             if t.join() != None:
-                if not sample[time_stamp].has_key('threads'):
-                    sample[time_stamp]['threads'] = []
-                sample[time_stamp]['threads'].append(t.join())
+                if not sample.has_key('threads'):
+                    sample['threads'] = []
+                sample['threads'].append(t.join())
 
         return sample
 
-    def __get_details(self, proc) :
+    def _get_details(self, proc) :
         process_entry = OrderedDict()
-        try:
-            process_entry['pid'] = proc.pid
-            process_entry['name'] = proc.name()
-            process_entry['samples'] = []
-        except:
-            pass
+        process_entry['pid'] = proc.pid
+        process_entry['name'] = CpuMonitor.get_process_name(process_entry['pid'])
+        process_entry['samples'] = []
         return process_entry
                 
-    def __collect_sample(self, bandwidth) :
+    def _collect_sample(self, bandwidth) :
         if self.name == 'all' :
             for proc in psutil.process_iter():
-                index = CpuMonitor.__find_index(self.parsed_output, proc)
+                index = CpuMonitor._find_index(self.parsed_output, proc)
                 if(index == -1):
-                    self.parsed_output[self.name].append(self.__get_details(proc))
-                    index = len(self.parsed_output['all']) - 1
-                self.parsed_output[self.name][index]['samples'].append(self.__get_sample(proc, bandwidth))
+                    self.parsed_output.append(self._get_details(proc))
+                    index = len(self.parsed_output) - 1
+                self.parsed_output[index]['samples'].append(self._get_sample(proc, bandwidth))
         else :
             proc = CpuMonitor.get_proc_object(self.name)
             if proc != None:
-                if self.parsed_output[self.name].has_key('samples'):
-                    self.parsed_output[self.name]['samples'].append(self.__get_sample(proc, bandwidth))
+                if self.parsed_output[0].has_key('samples'):
+                    self.parsed_output[0]['samples'].append(self._get_sample(proc, bandwidth))
                             
     def get_cpu_profile(self):                    # making a room for process        
         if self.name == 'all' :
-            self.parsed_output[self.name] = []
             for proc in psutil.process_iter():
-                self.parsed_output[self.name].append(self.__get_details(proc))
+                self.parsed_output.append(self._get_details(proc))
         else :
-            self.parsed_output[self.name] = {}
             proc = CpuMonitor.get_proc_object(self.name)
             if proc != None:
-                self.parsed_output[self.name] = self.__get_details(proc)
-        
-        # self.__call_repeatedly(self.__collect_sample)
-        
+                self.parsed_output.append(self._get_details(proc))
+                
         thread_objects = []
         for sample_count in range(global_variable.no_of_sample):
             bandwidth = monitor_utils.get_bandwidth() 
-            tObj = threading.Thread(target = self.__collect_sample, args = [bandwidth, ])
+            tObj = threading.Thread(target = self._collect_sample, args = [bandwidth, ])
             tObj.start()
             thread_objects.append(tObj)
             time.sleep(global_variable.sample_frequency)
@@ -146,31 +114,31 @@ class CpuMonitor:
         
         CpuMonitor.dump_output(self.parsed_output, self.file_addr)
         
-    # def __call_repeatedly(self, target_fun):
-    #     thread_objects = []
-    #     for sample_count in range(global_variable.no_of_sample):
-    #         bandwidth = monitor_utils.get_bandwidth() 
-    #         tObj = threading.Thread(target = target_fun, args = [bandwidth, ])
-    #         tObj.start()
-    #         thread_objects.append(tObj)
-    #         time.sleep(global_variable.sample_frequency)
-        
-    #     for tObj in thread_objects:
-    #         tObj.join()
+    @staticmethod
+    def get_process_name(pid):
+        try:
+            t = psutil.Process(int(pid))
+            return t.name()
+        except :
+            return None   
             
     @staticmethod
-    def __find_index(data, proc) :
-        for index in range(len(data['all'])) :
-            if proc.pid == data['all'][index]['pid'] :
+    def _find_index(data, proc) :
+        for index in range(len(data)) :
+            if proc.pid == data[index]['pid'] :
                 return index
         return -1
     
     @staticmethod
-    def __get_cpu_percent(proc, t):
-        total_percent = proc.cpu_percent(interval = 0.1)
-        total_time = sum(proc.cpu_times())
-        return total_percent * ((t.system_time + t.user_time)/total_time)
-                
+    def _get_cpu_percent(proc, t):
+        try:
+            total_percent = proc.cpu_percent(interval = 0.1)
+            total_time = sum(proc.cpu_times())
+            cpu_percent = total_percent * ((t.system_time + t.user_time)/total_time)
+            return cpu_percent
+        except:
+            return 0.0
+                    
     @staticmethod
     def get_proc_object(name):
         try:

@@ -5,9 +5,8 @@ import global_variable
 
 # singleton class
 class PerfGlobals:
-    
-    __instance = None
-    
+ 
+    _instance = None
     temp_directory = global_variable.temp_directory + 'perf' 
         
     directories = {
@@ -46,9 +45,9 @@ class PerfGlobals:
     latency_key = ''
             
     def __init__(self, record, sched, stat, latency):
-        if PerfGlobals.__instance == None:
+        if PerfGlobals._instance == None:
             
-            PerfGlobals.__instance = self
+            PerfGlobals._instance = self
             
             PerfGlobals.sleep_record = record['sleep']
             PerfGlobals.frequency = record['frequency']
