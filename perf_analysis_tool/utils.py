@@ -15,13 +15,12 @@ import global_variable
 from diag.perf.perf_globals import PerfGlobals
 
 def check_validity(arg_dict):
-
-    if not ( arg_dict['auto_mode'] and arg_dict['threshold_detection_mode'] ):
-        if arg_dict['samples_count'] or arg_dict['output_file']:
+    if sum(map(bool, [arg_dict['zip_file'], arg_dict['auto_mode'], arg_dict['threshold_detection_mode']])) <= 1:
+        if arg_dict['duration'] or arg_dict['output_threshold_file']:
             if arg_dict['threshold_detection_mode']:
                 return True
             return False
-        if arg_dict['window_size'] or arg_dict['consecutive_threshold_exceed_limit'] or arg_dict['mode'] or arg_dict['input_file']:
+        if arg_dict['window_size'] or arg_dict['consecutive_threshold_exceed_limit'] or arg_dict['mode'] or arg_dict['input_threshold_file']:
             if arg_dict['auto_mode']:
                 return True
             return False
@@ -30,13 +29,13 @@ def check_validity(arg_dict):
         return False
     
 def set_default(arg_dict):
-    if arg_dict['threshold_detection_mode'] and not arg_dict['samples_count']:
-        arg_dict['samples_count'] = 10
+    if arg_dict['threshold_detection_mode'] and not arg_dict['duration']:
+        arg_dict['duration'] = 50
         
-    if arg_dict['threshold_detection_mode'] and not arg_dict['output_file']:
-        arg_dict['output_file'] = 'threshold.json'
-        if is_file_exists('threshold.json'):
-            rename_file('threshold.json', 'threshold.json.old')
+    if arg_dict['threshold_detection_mode'] and not arg_dict['output_threshold_file']:
+        arg_dict['output_threshold_file'] = global_variable.output_directory + '/threshold.json'
+        if is_file_exists(arg_dict['output_threshold_file']):
+            add_tag_old(arg_dict['output_threshold_file'])
         
     if arg_dict['auto_mode'] and not arg_dict['window_size']:
         arg_dict['window_size'] = 5
@@ -47,24 +46,25 @@ def set_default(arg_dict):
     if arg_dict['auto_mode'] and not arg_dict['mode']:
         arg_dict['mode'] = 'value'
         
-    if arg_dict['auto_mode'] and not arg_dict['input_file']:
-        arg_dict['input_file'] = 'threshold.json'
+    if arg_dict['auto_mode'] and not arg_dict['input_threshold_file']:
+        arg_dict['input_threshold_file'] = global_variable.output_directory + '/threshold.json'
         
 def set_globals(arg_dict):
     
-    global_variable.offline_mode = arg_dict['filename']
+    global_variable.offline_mode = arg_dict['zip_file']
     
     global_variable.threshold_detection_mode = arg_dict['threshold_detection_mode']
     if arg_dict['threshold_detection_mode']:
-        global_variable.no_of_sample = arg_dict['samples_count']
-        global_variable.threshold_dump_file = arg_dict['output_file']
+        global_variable.duration = arg_dict['duration']
+        global_variable.no_of_sample = get_no_of_sample(global_variable.sample_frequency, global_variable.duration)
+        global_variable.threshold_dump_file = arg_dict['output_threshold_file']
     
     global_variable.auto_mode = arg_dict['auto_mode']
     if arg_dict['auto_mode']:
         global_variable.window_size = arg_dict['window_size']
         global_variable.consecutive_threshold_exceed_limit = arg_dict['consecutive_threshold_exceed_limit']
         global_variable.mode = arg_dict['mode']
-        global_variable.threshold_dump_file = arg_dict['input_file']
+        global_variable.threshold_dump_file = arg_dict['input_threshold_file']
 
 class CustomTimer(_Timer):
     def __init__(self, interval, function, args=[], kwargs={}):
@@ -104,8 +104,31 @@ def move_directory(source_directory, destination_directory):
         create_directory(destination_directory)    
     shutil.move(source_directory, destination_directory)
     
+def get_zip_files(directory):
+    available_zip = execute_command("find {0} -maxdepth 1 -name '*.zip'".format(directory))
+    available_zip = (available_zip.split('\n'))
+    available_zip.sort()
+    return available_zip
+
+def add_tag_old(file_):
+    path_ = file_.split('/')
+    path_.insert(len(path_) - 1, 'backup')
+    dest_file_ = '/'.join(path_)
+    rename_file(file_, dest_file_ + '.old')
+    
+def restore_existing_zip():
+    create_directory(global_variable.output_directory + '/backup')
+    available_zip = get_zip_files(global_variable.output_directory)
+    for file_ in available_zip:
+        if file_:
+            add_tag_old(file_)
+    
 def rename_file(source, destination):
+    # try:
     os.rename(source, destination)
+    # except:
+    #     shutil.rmtree(destination)
+    #     os.rename(source, destination)
     
 def load_data(file_addr):
     with open(file_addr, 'r') as r_obj:
@@ -162,15 +185,11 @@ def modify_drop(drop) :
     return drop
 
 def check_and_delete():
-    available_zip = execute_command("find {0} -maxdepth 1 -name '*.zip'".format(global_variable.output_directory))
-    available_zip = (available_zip.split('\n'))
-    available_zip.sort()
+    available_zip = get_zip_files(global_variable.output_directory)
     if len(available_zip) >= global_variable.window_size:
         sts = execute_command('rm {0}'.format(available_zip[0]))
 
 def zip_output(time_stamp):
-    # move_directory('{0}/temp_result'.format(output_directory), '{0}/diag_dump_{1}'.format(output_directory, time_stamp))
-    # path = '{0}/diag_dump_{1}'.format(output_directory, time_stamp)
     path = 'temp_result'
 
     check_and_delete()
@@ -195,8 +214,17 @@ def get_top_10(data):
         else :
             break
     return top_10
+
+def align_table(table_object, fields, alignment):
+    for field in fields :
+        table_object.align[field] = alignment
         
-def create_summary(critical_items):
+def read_file(file_addr, from_line, to_line):
+    with open (file_addr, 'r') as obj:
+        content = obj.readlines()[from_line: to_line]
+        return content
+        
+def generate_summary_report(critical_items):
     print('\n\tSummary Report\n')
     for key in critical_items:
         if key == 'cpu' or key == 'drops' or key == 'counters' :
@@ -209,7 +237,7 @@ def create_summary(critical_items):
                 for tid in critical_items[key]:
                     if count > 3:
                         break
-                    table.add_row([critical_items[key][tid]['name'], sum(critical_items[key][tid]['cpu_percent']) / len(critical_items[key][tid]['cpu_percent'])])
+                    table.add_row([critical_items[key][tid]['name'], get_average(critical_items[key][tid]['value'])])
                     count += 1
             elif key == 'drops':
                 fields = ['Handoff Queue Name', key]
@@ -217,8 +245,8 @@ def create_summary(critical_items):
                 for tid in critical_items[key]:
                     if count > 3:
                         break
-                    increase_rate = critical_items[key][tid]['drops'][len(critical_items[key][tid]['drops']) - 1] - critical_items[key][tid]['drops'][0]
-                    total_drops = critical_items[key][tid]['drops'][len(critical_items[key][tid]['drops']) - 1]
+                    increase_rate = critical_items[key][tid]['value'][len(critical_items[key][tid]['value']) - 1] - critical_items[key][tid]['value'][0]
+                    total_drops = critical_items[key][tid]['value'][len(critical_items[key][tid]['value']) - 1]
                     table.add_row([critical_items[key][tid]['name'], str(increase_rate) + '(' + str(total_drops) + ')'])
                     count += 1
             elif key == 'counters':
@@ -227,24 +255,15 @@ def create_summary(critical_items):
                 for name in critical_items[key]:
                     if count > 3:
                         break
-                    increase_rate = critical_items[key][name][len(critical_items[key][name]) - 1] - critical_items[key][name][0]
-                    total_drops = critical_items[key][name][len(critical_items[key][name]) - 1]
+                    increase_rate = critical_items[key][name]['value'][len(critical_items[key][name]['value']) - 1] - critical_items[key][name]['value'][0]
+                    total_drops = critical_items[key][name]['value'][len(critical_items[key][name]['value']) - 1]
                     table.add_row([name, str(increase_rate) + '(' + str(total_drops) + ')'])
                     count += 1
             align_table(table, fields, 'l')
             print(table)
             del table
-        
-def align_table(table_object, fields, alignment):
-    for field in fields :
-        table_object.align[field] = alignment
-        
-def read_file(file_addr, from_line, to_line):
-    with open (file_addr, 'r') as obj:
-        content = obj.readlines()[from_line: to_line]
-        return content
-    
-def print_table(critical_items):
+            
+def generate_detailed_report(critical_items):
     for key in critical_items:
         if key == 'cpu':
             fields = ['Thread Name', key, "perf Report", "Perf Stat"]
@@ -252,15 +271,12 @@ def print_table(critical_items):
             fields = ['Handoff Queue Name', key, "perf Report", "Perf Stat"]
         elif key == 'counters':
             fields = ['Counter Name', 'drops']
-        else:
-            fields = [key]
 
         table = PrettyTable(fields)
         align_table(table, fields, 'l')
 
         if key == 'cpu' or key == 'drops':
             for tid in critical_items[key]:
-                
                 report = []
                 for cnt in range(PerfGlobals.number_of_record):
                     report.append('Report_{0}\n'.format(cnt + 1))
@@ -274,32 +290,41 @@ def print_table(critical_items):
                 stat = stat.join(content)
 
                 if key == "cpu":
-                    table.add_row([critical_items[key][tid]['name'], sum(critical_items[key][tid]['cpu_percent']) / len(critical_items[key][tid]['cpu_percent']) , report, stat])
+                    table.add_row([critical_items[key][tid]['name'], get_average(critical_items[key][tid]['value']) , report, stat])
                 elif key =="drops":
-                    increase_rate = critical_items[key][tid]['drops'][len(critical_items[key][tid]['drops']) - 1] - critical_items[key][tid]['drops'][0]
-                    total_drops = critical_items[key][tid]['drops'][len(critical_items[key][tid]['drops']) - 1]
+                    increase_rate = critical_items[key][tid]['value'][len(critical_items[key][tid]['value']) - 1] - critical_items[key][tid]['value'][0]
+                    total_drops = critical_items[key][tid]['value'][len(critical_items[key][tid]['value']) - 1]
                     table.add_row([critical_items[key][tid]['name'], str(increase_rate) + '(' + str(total_drops) + ')', report, stat])
         elif key == 'counters':
             for name in critical_items[key]:
-                increase_rate = critical_items[key][name][len(critical_items[key][name]) - 1] - critical_items[key][name][0]
-                total_drops = critical_items[key][name][len(critical_items[key][name]) - 1]
+                increase_rate = critical_items[key][name]['value'][len(critical_items[key][name]['value']) - 1] - critical_items[key][name]['value'][0]
+                total_drops = critical_items[key][name]['value'][len(critical_items[key][name]['value']) - 1]
                 table.add_row([name, str(increase_rate) + '(' + str(total_drops) + ')'])
                 
-        else : 
-            print('Perf latency report:')
-            for index in range(len(critical_items[key])):
-                latency_report = critical_items[key][index]
-                sub_table = PrettyTable()
-                sub_table.add_column('Thread id', ['Switches', 'Runtime', 'Average delay', 'Maximum delay'])
-                fields = ['Thread id']
-                for tid in latency_report:
-                    sub_table.add_column(tid, [latency_report[tid]['Switches'], latency_report[tid]['Runtime'], latency_report[tid]['Average delay'], latency_report[tid]['Maximum delay']])
-                    fields.append(tid)
-                
-                align_table(sub_table, ['Thread id', 'Switches', 'Runtime', 'Average delay', 'Maximum delay'], 'l')
-                table.add_row([sub_table])
-
         print(table)
         del table
+        
+def generate_latency_report(latency_processed):
+    # from monitor.cpu_monitor import CpuMonitor
+    print('Perf latency report:')
+    
+    for key in latency_processed:
+        print('Based on ' + key)
+        table = PrettyTable()
+        table.add_column('Task', ['Switches', 'Maximum delay', 'Runtime', 'Average delay'])
+        for task in latency_processed[key]:
+            if task.split(':')[0] == '':
+                task_id = task.split(':')[1]
+            else:
+                task_id = task
+                # task = CpuMonitor.get_process_name(int(tid.split(':')[1]))
+            table.add_column(task_id, [get_average(latency_processed[key][task]['Switches']), get_average(latency_processed[key][task]['Maximum delay']), get_average(latency_processed[key][task]['Runtime']), get_average(latency_processed[key][task]['Average delay'])])
+        print(table)
+        del(table)
+        
+def get_average(l):
+    avg = sum(l) / len(l)
+    return avg
+
 
 

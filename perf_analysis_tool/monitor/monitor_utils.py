@@ -1,30 +1,36 @@
 import sys
 sys.path.append('perf_analysis_tool')
 
-import time
 import global_variable
-from diag.perf.perf_diag import PerfDiag
-from diag.perf.perf_globals import PerfGlobals    
+from diag.perf.perf_diag import start_profile
 import utils
+
+def find_threshold(threshold_dump_dict, key, value, bandwidth):
+    if not threshold_dump_dict.has_key(key):
+        threshold_dump_dict[key] = {}
+        threshold_dump_dict[key]['value_based'] = []
+        threshold_dump_dict[key]['bandwidth_based'] = []
+    update_threshold_list(threshold_dump_dict[key]['value_based'], 'value', value, bandwidth)
+    update_threshold_list(threshold_dump_dict[key]['bandwidth_based'], 'bandwidth', value, bandwidth)
+    
+def trigger_check(inp_trigger, threshold_dump_dict, key, value):
+    if inp_trigger:
+        trigger_value = inp_trigger
+    elif threshold_dump_dict.has_key(str(key)):
+        mode = global_variable.mode
+        trigger_value = get_threshold(threshold_dump_dict[str(key)], mode)
+        
+    if 'trigger_value' in locals():
+        if is_trigger_hits(value, trigger_value):
+            global_variable.is_triggered = 1
+            print('triggered -> {0}'.format(key))
+            start_profile()
     
 def is_trigger_hits(drop, trigger_value):
     if float(trigger_value) and float(drop) > float(trigger_value):
         return True
     return False
-    
-def do_start_perf():
-    for count in range(PerfGlobals.number_of_record):
-        output_file = 'perf_record_{0}.data'.format(count+1)
-        PerfDiag.do_perf_record(output_file)
-        time.sleep(PerfGlobals.delay_between_record)
-            
-    for count in range(PerfGlobals.number_of_sched):
-        output_file = 'perf_sched_{0}.data'.format(count+1)
-        PerfDiag.do_perf_sched(output_file)
-        time.sleep(PerfGlobals.delay_between_record)
-            
-    global_variable.is_triggered = 1
-    
+
 def get_bandwidth():
     output = utils.execute_command('debug.py -v --link')
     output = eval(output)

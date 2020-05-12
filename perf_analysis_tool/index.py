@@ -3,29 +3,26 @@ sys.path.append('perf_analysis_tool')
 
 import argparse
 import threading
-from collections import defaultdict, OrderedDict
-import subprocess
 import time
-import os
 
 from analysis import root_cause_analysis
 from diag.perf.perf_globals import PerfGlobals
-from diag.perf.perf_diag import PerfDiag
+from diag.perf.perf_diag import perform_diag
 import utils as utils
 import manifest 
 import global_variable 
 
 def parse_command_line_arguments():
     parser = argparse.ArgumentParser(description = 'Perf-analysis tool')
-    parser.add_argument("-F", "--filename", help="output zip file", type = file)
+    parser.add_argument("-F", "--zip_file", help="output zip file", type = file)
     parser.add_argument('-T', "--threshold_detection_mode", help= "Runs in Threshold detection mode", action = "store_true")
-    parser.add_argument('-o', '--output_file', help = 'custom output file for threshold_detection_mode')
-    parser.add_argument("-s", '--samples_count', help = 'Number of samples for threshold-detection-mode', type = int)
+    parser.add_argument('-o', '--output_threshold_file', help = 'custom output file for threshold_detection_mode')
+    parser.add_argument("-d", '--duration', help = 'Total duration for threshold-detection-mode', type = int)
     parser.add_argument('-A', '--auto_mode', help = 'Runs in Auto-mode', action = 'store_true')
     parser.add_argument('-w', '--window_size', help = 'size of window to accomodate file', type = int)
     parser.add_argument('-l', '--consecutive_threshold_exceed_limit', help = 'stop when exceeds this limit', type = int)
     parser.add_argument('-m', '--mode', help = 'mode - bandwidth based / value based', choices = {"value", "bandwidth"})
-    parser.add_argument('-i', '--input_file', help = 'custom input threshold file for auto_mode')
+    parser.add_argument('-i', '--input_threshold_file', help = 'custom input threshold file for auto_mode')
     
     args = parser.parse_args()
     return vars(args)
@@ -56,8 +53,13 @@ def get_diag_dump(monitor):
                 thread_list.append(t3)
                 
     for t in thread_list:
-        t.join()      
+        t.join()    
         
+def generate_report(critical_items, latency_processed):
+    utils.generate_summary_report(critical_items)
+    utils.generate_detailed_report(critical_items)
+    utils.generate_latency_report(latency_processed)
+     
 def init_global_variable(input):
     global_variable.duration = input['duration']
     global_variable.sample_frequency = input['sample_frequency']
@@ -67,7 +69,6 @@ def init_global_variable(input):
 def init(input):
     
     init_global_variable(input)
-    
     if input.has_key('diag'):
         for diag_key in input['diag']:
             if diag_key == 'perf':
@@ -75,15 +76,15 @@ def init(input):
                 perf_global_singleton_obj = PerfGlobals(perf_list['record'], perf_list['sched'], perf_list['stat'], perf_list['latency'])
                 
     utils.clear_directory(global_variable.temp_directory)
-    # if output directory exists -> make rename it with old tag
-    utils.create_directory(global_variable.output_directory)
+    if utils.is_file_exists(global_variable.output_directory):
+        utils.restore_existing_zip()
+    else:
+        utils.create_directory(global_variable.output_directory)
                     
 def main():
 
-    input = utils.load_data("input2.json")    
-
-    init(input)
-        
+    input = utils.load_data("input2.json")     
+    init(input)       
     arg_dict = parse_command_line_arguments()
             
     if utils.check_validity(arg_dict):
@@ -91,15 +92,14 @@ def main():
         utils.set_globals(arg_dict)
                         
         if global_variable.offline_mode:                                
-            print("perform zip op")
-            # time_stamp = time.time()
-            # utils.unzip_output(arg_dict.items()[0][1], input['output_directory'])
-            # critical_items = root_cause_analysis.extract_critical_items(input)
-            # # perf.collect_perf_report(critical_items)
-            # # perf.collect_perf_stat(critical_items)
-            # utils.create_summary(critical_items)
-            # utils.print_table(critical_items)
-            # utils.delete_temporary_files()    
+            utils.unzip_output(arg_dict['zip_file'])
+            if input['analysis']:
+                critical_items = root_cause_analysis.extract_critical_items(input['analysis'])
+                if input['diag']:
+                    latency_processed = root_cause_analysis.extract_top_latency()
+                    
+                generate_report(critical_items, latency_processed)
+            utils.delete_temporary_files()           
                 
         elif global_variable.threshold_detection_mode:
             get_diag_dump(input['monitor']) 
@@ -107,13 +107,13 @@ def main():
                 
             threshold = {}
             from monitor.cpu_monitor import CpuMonitor 
-            threshold['cpu'] = CpuMonitor.cpu_threshold
+            threshold['cpu'] = CpuMonitor.threshold_dump_cpu
             
             from monitor.command_monitor import Commands
-            threshold['commands'] = Commands.command_threshold
+            threshold['commands'] = Commands.threshold_dump_commands
             
             from monitor.counter_monitor import CounterMonitor
-            threshold['counters'] = CounterMonitor.counter_threshold
+            threshold['counters'] = CounterMonitor.threshold_dump_counter
                 
             utils.write_file(threshold, global_variable.threshold_dump_file)
             
@@ -134,11 +134,14 @@ def main():
                         get_diag_dump(input['monitor'])
                                             
                     manifest.create_manifest()
-                    if input['analysis'] and input['diag']:
-                        diag_list = [tool for tool in input['diag']]
-                        critical_items = root_cause_analysis.extract_critical_items(input['analysis'], diag_list)
-                        utils.create_summary(critical_items)
-                        utils.print_table(critical_items)
+                    
+                    if input['analysis']:
+                        critical_items = root_cause_analysis.extract_critical_items(input['analysis'])
+                        if input['diag']:
+                            perform_diag(input['diag'], critical_items)
+                            latency_processed = root_cause_analysis.extract_top_latency()
+                            
+                        generate_report(critical_items, latency_processed)
 
                     utils.zip_output(time_stamp)
                     utils.delete_temporary_files()
@@ -146,24 +149,22 @@ def main():
                 consecutive_threshold_exceed_limit += 1
                 if consecutive_threshold_exceed_limit == global_variable.consecutive_threshold_exceed_limit :
                     break
-                
-        else:
-            
+        else:   
             time_stamp = time.time()
             if input.has_key('monitor'):
                 get_diag_dump(input['monitor'])                            
                 manifest.create_manifest()
                     
-                if input['analysis'] and input['diag']:
-                    diag_list = [tool for tool in input['diag']]
-                    critical_items = root_cause_analysis.extract_critical_items(input['analysis'], diag_list)
-                    utils.create_summary(critical_items)
-                    utils.print_table(critical_items)
-
+                if input['analysis']:
+                    critical_items = root_cause_analysis.extract_critical_items(input['analysis'])
+                    if input['diag']:
+                        perform_diag(input['diag'], critical_items)
+                        latency_processed = root_cause_analysis.extract_top_latency()
+                        
+                    generate_report(critical_items, latency_processed)
+                    
                 utils.zip_output(time_stamp)
-                utils.delete_temporary_files()
-
-        
+                utils.delete_temporary_files()        
     else:
         print("something went wrong")    
 

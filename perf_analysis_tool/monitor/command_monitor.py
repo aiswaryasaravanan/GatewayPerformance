@@ -2,6 +2,7 @@ import sys
 sys.path.append('perf_analysis_tool')
 
 import time
+from collections import OrderedDict
 
 import utils
 import global_variable
@@ -31,41 +32,48 @@ class Commands():
         else:
             self.trigger = None
         self.file_addr = utils.get_file_addr(Commands.files, self.name, Commands.temp_directory, 'txt')
-        self.parsed_output = {}
+        self.parsed_output = []
                             
     def get_handoff(self, command, bandwidth) :
         command_output = utils.execute_command(command)   
-        current_sample = {}
+        current_sample = OrderedDict()
         time_stamp = time.time()
-        current_sample[time_stamp] = {}
-        current_sample[time_stamp]['bandwidth'] = bandwidth
-        current_sample[time_stamp]['handoffq'] = eval(command_output)['handoffq']
-        self.parsed_output[self.name].append(current_sample)
+        current_sample['time_stamp'] = time_stamp
+        current_sample['bandwidth'] = bandwidth
+        current_sample['handoffq'] = eval(command_output)['handoffq']
+        self.parsed_output.append(current_sample)
             
+        # poison queue
         self.parsed_output = Commands.poison_queue(self.parsed_output)
-        command_output = self.parsed_output['handoff'][len(self.parsed_output['handoff']) - 1][time_stamp]
+        current_sample = self.parsed_output[len(self.parsed_output) - 1]
             
+        # if threshold detection mode
         if global_variable.threshold_detection_mode:
-            self.__find_threshold(command_output, bandwidth)
+            for queue in current_sample['handoffq']:
+                monitor_utils.find_threshold(Commands.threshold_dump_commands, queue['name'], queue['drops'], bandwidth)
             
+        # if auto mode
         elif global_variable.auto_mode and global_variable.is_triggered == 0:
-            self.__trigger_check(command_output)
+            with global_variable.trigger_lock:          # wait for lock acquisition
+                for queue in current_sample['handoffq']:
+                    if global_variable.is_triggered != 0:
+                        break
+                    monitor_utils.trigger_check(self.trigger, Commands.threshold_dump_commands, queue['name'], queue['drops'])
                         
-        return command_output
+        # return command_output
         
     def get_custom_commands(self, command, bandwidth):
         command_output = utils.execute_command(command)
-        self.parsed_output.append(str(time.time()))
-        self.parsed_output.append(str(bandwidth))
+        self.parsed_output.append('time_stamp : ' + str(time.time()))
+        self.parsed_output.append('bandwidth : ' + str(bandwidth))
+        self.parsed_output.append('output : ')
         self.parsed_output.append(command_output)
         
     def get_command_output(self):
         if self.name == 'handoff':
-            self.parsed_output[self.name] = []
             target_fun = self.get_handoff
             self.file_type = 'json'
         else: 
-            self.parsed_output = []
             target_fun = self.get_custom_commands
             self.file_type = 'text'
         
@@ -82,54 +90,24 @@ class Commands():
             tObj.join()
             
         Commands.dump_output(self.parsed_output, self.file_addr, self.file_type)
-        
-    def __find_threshold(command_output, bandwidth):
-        if not Commands.threshold_dump_commands.has_key('handoffq'):
-            Commands.threshold_dump_commands['handoffq'] = {}
-            for queue in command_output['handoffq']:
-                # if not Commands.threshold_dump_commands.has_key(queue['name']):
-                Commands.threshold_dump_commands['handoffq'][queue['name']] = {}
-                Commands.threshold_dump_commands['handoffq'][queue['name']]['value_based'] = []
-                Commands.threshold_dump_commands['handoffq'][queue['name']]['bandwidth_based'] = []
-        for queue in command_output['handoffq']:
-            monitor_utils.update_threshold_list(Commands.threshold_dump_commands['handoffq'][queue['name']]['value_based'], 'value', queue['drops'], bandwidth)               
-            monitor_utils.update_threshold_list(Commands.threshold_dump_commands['handoffq'][queue['name']]['bandwidth_based'], 'bandwidth', queue['drops'], bandwidth)   
-
-    def __trigger_check(self, handoff):
-        with global_variable.trigger_lock:          # wait for lock acquisition
-            for queue in handoff['handoffq']:
-                if global_variable.is_triggered == 0:
-                    if self.trigger:
-                        trigger_value = self.trigger
-                    elif Commands.threshold_dump_commands['handoffq'].has_key(queue['name']):
-                        mode = global_variable.mode
-                        trigger_value = monitor_utils.get_threshold(Commands.threshold_dump_commands['handoffq'][queue['name']], mode)
-                        
-                    if 'trigger_value' in locals():
-                        if monitor_utils.is_trigger_hits(queue['drops'], trigger_value):
-                            print('triggered -> commands')
-                            monitor_utils.do_start_perf()
-                        else: 
-                            continue
-                break
-            
+   
     @staticmethod
     def poison_queue(handoff) :
-        length = len(handoff['handoff'])
+        length = len(handoff)
         if length == 1:
-            entry = handoff['handoff'][0]
-            TS = entry.items()[0][0]
-            for queue in range(len(entry[TS]['handoffq'])):
-                entry[TS]['handoffq'][queue]['drops'] = utils.modify_drop(entry[TS]['handoffq'][queue]['drops'])
-            pass
+            # entry = handoff[0]
+            # for queue in range(len(entry['handoffq'])):
+            #     entry['handoffq'][queue]['drops'] = utils.modify_drop(entry['handoffq'][queue]['drops'])
+            for queue in handoff[0]['handoffq']:
+                queue['drops'] = utils.modify_drop(queue['drops'])
         else:
             current_index = length - 1
-            previous_timestamp_entry = handoff['handoff'][current_index - 1]
-            pre_TS = previous_timestamp_entry.items()[0][0]
-            current_timestamp_entry = handoff['handoff'][current_index]
-            cur_TS = current_timestamp_entry.items()[0][0]
-            for queue in range(len(current_timestamp_entry[cur_TS]['handoffq'])):
-                current_timestamp_entry[cur_TS]['handoffq'][queue]['drops'] = utils.modify_drop(previous_timestamp_entry[pre_TS]['handoffq'][queue]['drops'])
+            current_timestamp_entry = handoff[current_index]
+            previous_timestamp_entry = handoff[current_index - 1]
+            
+            for queue in range(len(current_timestamp_entry['handoffq'])):
+                current_timestamp_entry['handoffq'][queue]['drops'] = utils.modify_drop(previous_timestamp_entry['handoffq'][queue]['drops'])
+
      
         return handoff
                 
