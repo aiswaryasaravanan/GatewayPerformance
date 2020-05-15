@@ -2,10 +2,6 @@
 	"duration" : 15,
 	"sample_frequency" : 5,
     "output_directory" : "/root/perf-analysis/result",
-    "auto_mode" : {
-        "consecutive_threshold_exceed_limit" : 3,
-        "window_size" : 2
-    },
 	"monitor" : {
 		"cpu" : [
 			{

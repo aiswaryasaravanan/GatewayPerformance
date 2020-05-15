@@ -64,10 +64,12 @@ def init_global_variable(input):
     global_variable.duration = input['duration']
     global_variable.sample_frequency = input['sample_frequency']
     global_variable.no_of_sample = utils.get_no_of_sample(global_variable.sample_frequency, global_variable.duration)
-    global_variable.output_directory = input['output_directory']
+    if input.has_key('output_directory'):
+        global_variable.output_directory = input['output_directory']
+    else:
+        global_variable.output_directory = utils.get_current_working_directory() + '/output'
         
 def init(input):
-    
     init_global_variable(input)
     if input.has_key('diag'):
         for diag_key in input['diag']:
@@ -76,34 +78,40 @@ def init(input):
                 perf_global_singleton_obj = PerfGlobals(perf_list['record'], perf_list['sched'], perf_list['stat'], perf_list['latency'])
                 
     utils.clear_directory(global_variable.temp_directory)
-    if utils.is_file_exists(global_variable.output_directory):
-        utils.restore_existing_zip()
-    else:
-        utils.create_directory(global_variable.output_directory)
+    # if utils.is_file_exists(global_variable.output_directory):
+    #     utils.restore_existing_zip()
+    # else:
+    #     utils.create_directory(global_variable.output_directory)
+    
                     
 def main():
 
-    input = utils.load_data("input2.json")     
-    init(input)       
+    input = utils.load_data("input.json")     
+    init(input)    
+    time_stamp = time.time()   
     arg_dict = parse_command_line_arguments()
             
     if utils.check_validity(arg_dict):
         utils.set_default(arg_dict)
-        utils.set_globals(arg_dict)
                         
         if global_variable.offline_mode:                                
             utils.unzip_output(arg_dict['zip_file'])
             if input['analysis']:
                 critical_items = root_cause_analysis.extract_critical_items(input['analysis'])
                 if input['diag']:
+                    if not utils.is_file_exists(PerfGlobals.temp_directory):        # zip -> not triggered
+                        print('No trigger in this zip')
+                        exit()
                     latency_processed = root_cause_analysis.extract_top_latency()
-                    
-                generate_report(critical_items, latency_processed)
-            utils.delete_temporary_files()           
+                    generate_report(critical_items, latency_processed)
+            utils.directory_reset()           
                 
         elif global_variable.threshold_detection_mode:
+            global_variable.output_directory = global_variable.output_directory + '/threshold'
+            utils.create_directory(global_variable.output_directory)
+            
             get_diag_dump(input['monitor']) 
-            utils.delete_temporary_files()        
+            utils.directory_reset()        
                 
             threshold = {}
             from monitor.cpu_monitor import CpuMonitor 
@@ -118,6 +126,9 @@ def main():
             utils.write_file(threshold, global_variable.threshold_dump_file)
             
         elif global_variable.auto_mode:
+            global_variable.output_directory = global_variable.output_directory + '/results/' + str(int(time_stamp))
+            utils.create_directory(global_variable.output_directory)
+            
             consecutive_threshold_exceed_limit = 0
             while True:
                 utils.create_directory(global_variable.temp_directory)
@@ -129,7 +140,7 @@ def main():
                     while global_variable.is_triggered == 0:
                         manifest.create_manifest()
                         utils.zip_output(time_stamp)
-                        utils.delete_temporary_files()
+                        utils.directory_reset()
                         global_variable.trigger_lock = threading.Lock()
                         get_diag_dump(input['monitor'])
                                             
@@ -140,17 +151,18 @@ def main():
                         if input['diag']:
                             perform_diag(input['diag'], critical_items)
                             latency_processed = root_cause_analysis.extract_top_latency()
-                            
-                        generate_report(critical_items, latency_processed)
+                            generate_report(critical_items, latency_processed)
 
                     utils.zip_output(time_stamp)
-                    utils.delete_temporary_files()
+                    utils.directory_reset()
 
                 consecutive_threshold_exceed_limit += 1
                 if consecutive_threshold_exceed_limit == global_variable.consecutive_threshold_exceed_limit :
                     break
         else:   
-            time_stamp = time.time()
+            global_variable.output_directory = global_variable.output_directory + '/results/' + str(int(time_stamp))
+            utils.create_directory(global_variable.output_directory)
+            
             if input.has_key('monitor'):
                 get_diag_dump(input['monitor'])                            
                 manifest.create_manifest()
@@ -160,11 +172,10 @@ def main():
                     if input['diag']:
                         perform_diag(input['diag'], critical_items)
                         latency_processed = root_cause_analysis.extract_top_latency()
-                        
-                    generate_report(critical_items, latency_processed)
+                        generate_report(critical_items, latency_processed)
                     
                 utils.zip_output(time_stamp)
-                utils.delete_temporary_files()        
+                utils.directory_reset()        
     else:
         print("something went wrong")    
 

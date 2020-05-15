@@ -26,7 +26,7 @@ def counter_based_critical_items():
 
     sorted_res = OrderedDict()
 
-    for key, value in sorted(critical_items.items(), key = lambda item : item[1]['value'][len(item[1]['value']) - 1] - item[1]['value'][0], reverse =True):
+    for key, value in sorted(critical_items.items(), key = lambda item : utils.get_total_drops(item[1]['value']), reverse =True):
         sorted_res[key] = value
 
     return utils.get_top_10(sorted_res)
@@ -43,7 +43,7 @@ def drop_based_critical_items():
 
     sorted_res = OrderedDict()
     
-    for key, value in sorted(critical_items.items(), key = lambda item : item[1]['value'][len(item[1]['value']) - 1] - item[1]['value'][0], reverse = True):
+    for key, value in sorted(critical_items.items(), key = lambda item : utils.get_total_drops(item[1]['value']), reverse = True):
         sorted_res[key] = value
 
     return utils.get_top_10(sorted_res)
@@ -60,7 +60,7 @@ def cpu_based_critical_items():
 
     sorted_res = OrderedDict()
 
-    for key, value in sorted(critical_items.items(), key = lambda item : sum(item[1]['value']) / len(item[1]['value']), reverse = True):
+    for key, value in sorted(critical_items.items(), key = lambda item : utils.get_average(item[1]['value']), reverse = True):
         sorted_res[key] = value
 
     return utils.get_top_10(sorted_res)
@@ -103,6 +103,6 @@ def get_latency_data(input_file, latency_data, fields):
 
 def sort_latency_data(latency_data, key, fields):
     sorted_res = OrderedDict()
-    for key, value in sorted(latency_data.items(), key = lambda item : sum(item[1][key]) / len(item[1][key]) , reverse = True):
+    for key, value in sorted(latency_data.items(), key = lambda item : utils.get_average(item[1][key]) , reverse = True):
         sorted_res[key] = latency_data[key]
     return utils.get_top_10(sorted_res)

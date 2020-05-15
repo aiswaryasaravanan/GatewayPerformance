@@ -55,6 +55,8 @@ class CpuMonitor:
         sample = {}
         sample['time_stamp'] = time.time()
         sample['bandwidth'] = bandwidth
+        if proc.name == 'edged':
+            print(proc.pid)
         sample['cpu_percent'] = proc.cpu_percent(interval = 0.1)
 
         thread_objects = []

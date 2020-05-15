@@ -71,8 +71,8 @@ def do_perf_diag(critical_items):
     if not global_variable.auto_mode:
         start_profile()
     report_util(critical_items)
-    stat_util(critical_items)
     latency_util()
+    stat_util(critical_items)
 
 def start_profile():
     for count in range(PerfGlobals.number_of_record):
