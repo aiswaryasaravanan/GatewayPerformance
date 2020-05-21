@@ -162,7 +162,7 @@ def main():
         else:   
             global_variable.output_directory = global_variable.output_directory + '/results/' + str(int(time_stamp))
             utils.create_directory(global_variable.output_directory)
-            
+                
             if input.has_key('monitor'):
                 get_diag_dump(input['monitor'])                            
                 manifest.create_manifest()

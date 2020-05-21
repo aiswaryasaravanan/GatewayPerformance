@@ -44,8 +44,8 @@ class Commands():
         self.parsed_output.append(current_sample)
             
         # poison queue
-        self.parsed_output = Commands.poison_queue(self.parsed_output)
-        current_sample = self.parsed_output[len(self.parsed_output) - 1]
+        # self.parsed_output = Commands.poison_queue(self.parsed_output)
+        # current_sample = self.parsed_output[len(self.parsed_output) - 1]
             
         # if threshold detection mode
         if global_variable.threshold_detection_mode:

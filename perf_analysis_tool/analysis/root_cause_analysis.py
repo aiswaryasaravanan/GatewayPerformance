@@ -31,6 +31,11 @@ def counter_based_critical_items():
 
     return utils.get_top_10(sorted_res)
 
+def get_tid(queue_name):             # since physical edge -> 3.4.1
+    name = queue_name.replace('vc_queue_', '', 1)
+    tid = utils.execute_command("top -p `pgrep edged` -H -b -n 1 | grep "+name+" | awk '{print $1}'")
+    return tid
+    
 def drop_based_critical_items():
     from monitor.command_monitor import Commands
     handoff = utils.load_data(utils.get_file_addr(Commands.files, "handoff")) 
@@ -39,7 +44,9 @@ def drop_based_critical_items():
     
     for entry in handoff:
         for queue in entry['handoffq']:
-            get_dict(critical_items, queue['tid'], queue['drops'], queue['name'])
+            tid = get_tid(queue['name'])
+            # get_dict(critical_items, queue['tid'], queue['drops'], queue['name'])
+            get_dict(critical_items, tid, queue['drops'], queue['name'])
 
     sorted_res = OrderedDict()
     
@@ -98,6 +105,7 @@ def get_latency_data(input_file, latency_data, fields):
             for field in fields:
                 latency_data[tid][field] = []
         for field in fields:
+            # print("index:"+field+ " -> "+str(PerfGlobals.latency_field_index[field]))
             latency_data[tid][field].append(float(line[PerfGlobals.latency_field_index[field]]))
     return latency_data
 

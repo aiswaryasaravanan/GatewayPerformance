@@ -7,7 +7,7 @@ import json
 import commands
 from zipfile import ZipFile
 from threading import _Timer
-from prettytable import PrettyTable
+# from prettytable import PrettyTable
 import random
 import time
 from collections import OrderedDict
@@ -43,7 +43,7 @@ def set_default(arg_dict):
         if arg_dict['duration']:
             global_variable.duration = arg_dict['duration']
         else:
-            global_variable.duration = 50
+            global_variable.duration = 60
         global_variable.no_of_sample = get_no_of_sample(global_variable.sample_frequency, global_variable.duration)
         
         if arg_dict['output_threshold_file']:
@@ -64,7 +64,7 @@ def set_default(arg_dict):
         if arg_dict['consecutive_threshold_exceed_limit']:
             global_variable.consecutive_threshold_exceed_limit = arg_dict['consecutive_threshold_exceed_limit']
         else:
-            global_variable.consecutive_threshold_exceed_limit = 2
+            global_variable.consecutive_threshold_exceed_limit = 3
             
         if arg_dict['mode']:
             global_variable.mode = arg_dict['mode']
@@ -86,19 +86,21 @@ class CustomTimer(_Timer):
 def create_directory(directory) :
     try :
         os.mkdir(directory)
-    except :
-        if os.path.exists(directory):                            # File exists
+    except Exception as e:
+        if e.strerror == 'File exists':                                # File exists
             pass
-        else :                                                   # No such file or directory 
+        elif e.strerror == 'No such file or directory':                                                   # No such file or directory 
             directories = directory.split('/')                    
             directory_path = ''
             for d in directories :
                 if d == '':
                     directory_path += '/'
-                    pass
+                    continue
                 directory_path += d
                 create_directory(directory_path)
                 directory_path += '/'
+        else:
+            raise Exception(e.strerror)
 
 def clear_directory(directory):
     if os.path.exists(directory) :
@@ -128,7 +130,7 @@ def get_zip_files(directory):
 #         if file_:
 #             add_tag_old(file_)
     
-def rename_file(source, destination):
+def rename_file(source, destination):                                            # todo: Handle exception
     # try:
     os.rename(source, destination)
     # except:
@@ -232,6 +234,33 @@ def read_file(file_addr, from_line, to_line):
     with open (file_addr, 'r') as obj:
         content = obj.readlines()[from_line: to_line]
         return content
+
+def append_list_of_list(tab_list, list_):
+    for ind in range(len(list_)):
+        tab_list[ind].append(list_[ind])
+
+def print_table(list_):
+    cols = len(list_[0])
+    
+    col_width = []
+    for i in range(cols):
+        col_width.append(max(len(line) for row in list_ for line in str(row[i]).split('\n')))
+
+    dash = ['-'] * (sum(col_width) + (4 * cols))
+    print(''.join(dash))
+    for row in list_:
+        max_line = max(len(str(col).split('\n')) for col in row)
+        
+        for line in range(max_line):
+            for col_index in range(cols):
+                if line < len(str(row[col_index]).split('\n')):
+                    value = str(row[col_index]).split('\n')[line]
+                else: 
+                    value = ' '
+                print("{0:<{colW}}  |".format(value, colW=col_width[col_index])),
+            print('')
+        
+        print(''.join(dash))
     
 def generate_summary_report(critical_items):
     print('\n\tSummary Report\n')
@@ -246,7 +275,9 @@ def generate_summary_report(critical_items):
         elif key == 'counters':
             fields = ['Counter Name', 'drops']
             
-        table = PrettyTable(fields)
+        # table = PrettyTable(fields)                                                               # prettytable
+        tab_list = []                                                                               # prettytable alternative(manual method) 
+        tab_list.append(fields)                                                                     # prettytable alternative(manual method) 
         for tid in critical_items[key]:
             if count > 3:
                 break
@@ -263,11 +294,13 @@ def generate_summary_report(critical_items):
                 total_drops = get_total_drops(critical_items[key][tid]['value'])
                 avg_drops = total_drops / global_variable.no_of_sample
                 value = str(total_drops) + '(' + str(avg_drops) + ')'
-            table.add_row([name, value])
+            # table.add_row([name, value])                                                          # prettytable
+            tab_list.append([name, value])                                                          # prettytable alternative(manual method)
             count += 1
-        align_table(table, fields, 'l')
-        print(table)
-        del table
+        # align_table(table, fields, 'l')                                                           # prettytable
+        # print(table)                                                                              # prettytable
+        # del table                                                                                 # prettytable
+        print_table(tab_list)                                                                       # prettytable alternative(manual method)
             
 def generate_detailed_report(critical_items):
     for key in critical_items:
@@ -278,8 +311,10 @@ def generate_detailed_report(critical_items):
         elif key == 'counters':
             fields = ['Counter Name', 'drops']
 
-        table = PrettyTable(fields)
-        align_table(table, fields, 'l')
+        # table = PrettyTable(fields)                                                               # prettytable 
+        # align_table(table, fields, 'l')                                                           # prettytable 
+        tab_list = []                                                                               # prettytable alternative(manual method)
+        tab_list.append(fields)                                                                     # prettytable alternative(manual method)    
 
         if key == 'cpu' or key == 'drops':
             for tid in critical_items[key]:
@@ -304,41 +339,52 @@ def generate_detailed_report(critical_items):
                 content = read_file(generate_file_name(str(tid), '{0}/{1}'.format(get_file_addr(PerfGlobals.directories, 'stat'), key), 'txt'), 3, -2)
                 stat = ''.join(content)
 
-                table.add_row([name, value, report, stat])
+                # table.add_row([name, value, report, stat])                                        # prettytable 
+                tab_list.append([name, value, report, stat])                                        # prettytable alternative(manual method)
         elif key == 'counters':
             for name in critical_items[key]:
                 total_drops = get_total_drops(critical_items[key][name]['value']) 
                 avg_drops = total_drops / global_variable.no_of_sample
                 value = str(total_drops) + '(' + str(avg_drops) + ')'
                 
-                table.add_row([name, value])
+                # table.add_row([name, value])                                                      # prettytable 
+                tab_list.append([name, value])                                                      # prettytable alternative(manual method)
                 
-        print(table)
-        del table
+        # print(table)                                                                              # prettytable 
+        # del table                                                                                 # prettytable 
+        print_table(tab_list)                                                                       # prettytable alternative(manual method)
         
 def generate_latency_report(latency_processed):
     print('Perf latency report:')
     
     for key in latency_processed:
         print('Based on ' + key)
-        table = PrettyTable()
-        table.add_column('Task', ['Switches', 'Maximum delay', 'Runtime', 'Average delay'])
+        # table = PrettyTable()                                                                     # prettytable
+        # table.add_column('Task', ['Switches', 'Maximum delay', 'Runtime', 'Average delay'])       # prettytable
+        fields = ['Task', 'Switches', 'Maximum delay', 'Runtime', 'Average delay']                  # prettytable alternative(manual method)
+        tab_list = [[] for i in range(len(fields))]                                                 # prettytable alternative(manual method)
+        append_list_of_list(tab_list, ['Task' ,'Switches', 'Maximum delay', 'Runtime', 'Average delay']) # prettytable alternative(manual method)
         for task in latency_processed[key]:
             if task.split(':')[0] != '':
                 name = task.split(':')[0]
             else:
                 name = task.split(':')[1]
-            table.add_column(name, [get_average(latency_processed[key][task]['Switches']), get_average(latency_processed[key][task]['Maximum delay']), get_average(latency_processed[key][task]['Runtime']), get_average(latency_processed[key][task]['Average delay'])])
-        print(table)
-        del(table)
+            # prettytable
+            # table.add_column(name, [get_average(latency_processed[key][task]['Switches']), get_average(latency_processed[key][task]['Maximum delay']), get_average(latency_processed[key][task]['Runtime']), get_average(latency_processed[key][task]['Average delay'])])
+            # prettytable alternative(manual method)
+            append_list_of_list(tab_list, [name, get_average(latency_processed[key][task]['Switches']), get_average(latency_processed[key][task]['Maximum delay']), get_average(latency_processed[key][task]['Runtime']), get_average(latency_processed[key][task]['Average delay'])])
+        # print(table)                                                                                # prettytable
+        # del(table)                                                                                  # prettytable
+        print_table(tab_list)                                                                         # prettytable alternative(manual method)  
         
 def get_average(list_):
     avg = sum(list_) / len(list_)
     return avg
 
 def get_total_drops(list_):
-    total_drops = list_[len(list_) - 1] - list_[0]
+    total_drops = int(list_[len(list_) - 1]) - int(list_[0])
     return total_drops
+
 
 
 

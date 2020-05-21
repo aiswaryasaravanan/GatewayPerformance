@@ -90,8 +90,8 @@ class CounterMonitor:
             self.parsed_output.append(current_sample)
             
             # poision counter
-            self.parsed_output = CounterMonitor.poison_counters(self.parsed_output)
-            current_sample = self.parsed_output[len(self.parsed_output) - 1]
+            # self.parsed_output = CounterMonitor.poison_counters(self.parsed_output)
+            # current_sample = self.parsed_output[len(self.parsed_output) - 1]
             
             # if threshold detection mode
             if global_variable.threshold_detection_mode:

@@ -35,7 +35,7 @@ def get_bandwidth():
     output = utils.execute_command('debug.py -v --link')
     output = eval(output)
     for link in output:
-        if link['vpnState'] == 'STABLE':
+        if link['vpnState'] == 'STABLE' and link['linkmode'] == 'ACTIVE' and link['state'] == 'STABLE':
             return link['bpsOfBestPathTx']
 
 def update_threshold_list(threshold_list, key, value, bandwidth):
